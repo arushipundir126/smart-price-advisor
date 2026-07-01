@@ -1,0 +1,23 @@
+# FILE: backend/requirements.txt
+#
+# WHAT THIS DOES:
+# Pins the Python dependencies for the FastAPI backend.
+#
+# CHANGES THIS SESSION:
+# - Initial dependency list for the Phase 1 walking skeleton.
+#
+# WHERE IT FITS:
+# Installed on Render and locally so the backend can run.
+#
+# CALLED BY / IMPORTS FROM:
+# pip install -r requirements.txt
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+python-dotenv==1.0.1
+httpx==0.28.1
+supabase==2.11.0
+slowapi==0.1.9
+google-generativeai==0.8.3
+apify-client==1.9.2

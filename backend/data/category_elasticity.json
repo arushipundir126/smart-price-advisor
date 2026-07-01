@@ -1,0 +1,24 @@
+{
+  "_comment": "Signal 5 rule table. typical_sale_drop_pct is [min, max] percent a category usually falls in Indian sales. worth_waiting is false when the drop is too small to bother waiting for. Update from domain knowledge as needed.",
+  "categories": [
+    { "category": "smartphones", "typical_sale_drop_pct": [18, 35], "worth_waiting": true },
+    { "category": "laptops", "typical_sale_drop_pct": [10, 25], "worth_waiting": true },
+    { "category": "tablets", "typical_sale_drop_pct": [10, 25], "worth_waiting": true },
+    { "category": "televisions", "typical_sale_drop_pct": [15, 30], "worth_waiting": true },
+    { "category": "audio", "typical_sale_drop_pct": [15, 40], "worth_waiting": true },
+    { "category": "wearables", "typical_sale_drop_pct": [15, 35], "worth_waiting": true },
+    { "category": "cameras", "typical_sale_drop_pct": [10, 25], "worth_waiting": true },
+    { "category": "gaming_consoles", "typical_sale_drop_pct": [5, 20], "worth_waiting": true },
+    { "category": "large_appliances", "typical_sale_drop_pct": [10, 20], "worth_waiting": true },
+    { "category": "small_appliances", "typical_sale_drop_pct": [5, 15], "worth_waiting": true },
+    { "category": "kitchen_appliances", "typical_sale_drop_pct": [5, 20], "worth_waiting": true },
+    { "category": "furniture", "typical_sale_drop_pct": [10, 30], "worth_waiting": true },
+    { "category": "fashion_clothing", "typical_sale_drop_pct": [30, 70], "worth_waiting": true },
+    { "category": "footwear", "typical_sale_drop_pct": [25, 60], "worth_waiting": true },
+    { "category": "beauty_skincare", "typical_sale_drop_pct": [20, 40], "worth_waiting": true },
+    { "category": "toys", "typical_sale_drop_pct": [10, 30], "worth_waiting": true },
+    { "category": "books", "typical_sale_drop_pct": [5, 10], "worth_waiting": false },
+    { "category": "grocery_staples", "typical_sale_drop_pct": [0, 5], "worth_waiting": false },
+    { "category": "fuel", "typical_sale_drop_pct": [0, 0], "worth_waiting": false }
+  ]
+}

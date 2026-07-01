@@ -1,0 +1,132 @@
+"""
+FILE: backend/db/watchlist.py
+
+WHAT THIS DOES:
+Read and write helpers for the watchlist_items table. Watchlists are tied to a
+browser session id (no login in v1). Handles add/update, listing with each
+item's latest price, removing an item, marking an item as bought, and marking
+a drop as already notified.
+
+CHANGES THIS SESSION:
+- Added add_or_update_item(), list_for_session(), remove_item(),
+  mark_purchased(), and mark_notified().
+
+WHERE IT FITS:
+Sits on top of db/supabase_client.py and reuses db/price_snapshots for the
+latest price. Called by the watchlist router and the scheduled price checks.
+
+CALLED BY / IMPORTS FROM:
+Imports get_client from db/supabase_client and get_snapshots from
+db/price_snapshots. Called by routers/watchlist.py.
+"""
+from datetime import datetime, timezone
+from typing import Optional
+
+from db.price_snapshots import get_snapshots
+from db.supabase_client import get_client
+
+# Columns we read back, including the embedded product name/brand/category.
+# Named explicitly, never SELECT * (security rule).
+_COLUMNS = (
+    "id, session_id, product_id, target_price, notified, purchased, "
+    "purchased_at, created_at, products(name, brand, category)"
+)
+
+
+def add_or_update_item(
+    session_id: str, product_id: str, target_price: Optional[float] = None
+) -> dict:
+    """Add a product to a session's watchlist, or update its target price.
+
+    Uses the unique (session_id, product_id) constraint so re-adding the same
+    product updates the existing row instead of creating a duplicate.
+    """
+    client = get_client()
+    result = (
+        client.table("watchlist_items")
+        .upsert(
+            {
+                "session_id": session_id,
+                "product_id": product_id,
+                "target_price": target_price,
+            },
+            on_conflict="session_id,product_id",
+        )
+        .execute()
+    )
+    return result.data[0]
+
+
+def list_for_session(session_id: str) -> list[dict]:
+    """Everything a session is watching, each with its latest known price."""
+    client = get_client()
+    result = (
+        client.table("watchlist_items")
+        .select(_COLUMNS)
+        .eq("session_id", session_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+
+    items = []
+    for row in result.data:
+        latest = get_snapshots(row["product_id"], limit=1)
+        latest_price = float(latest[0]["price"]) if latest else None
+        latest_platform = latest[0]["platform"] if latest else None
+        product = row.get("products") or {}
+        items.append(
+            {
+                "id": row["id"],
+                "product_id": row["product_id"],
+                "name": product.get("name"),
+                "category": product.get("category"),
+                "target_price": row["target_price"],
+                "notified": row["notified"],
+                "purchased": row["purchased"],
+                "purchased_at": row["purchased_at"],
+                "latest_price": latest_price,
+                "latest_platform": latest_platform,
+            }
+        )
+    return items
+
+
+def remove_item(session_id: str, product_id: str) -> None:
+    """Remove one product from a session's watchlist."""
+    client = get_client()
+    (
+        client.table("watchlist_items")
+        .delete()
+        .eq("session_id", session_id)
+        .eq("product_id", product_id)
+        .execute()
+    )
+
+
+def mark_purchased(session_id: str, product_id: str) -> Optional[dict]:
+    """Mark a watched product as bought, stamping the time. Returns the row."""
+    client = get_client()
+    result = (
+        client.table("watchlist_items")
+        .update(
+            {
+                "purchased": True,
+                "purchased_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        .eq("session_id", session_id)
+        .eq("product_id", product_id)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def mark_notified(item_id: str) -> None:
+    """Flag that we have already alerted this drop, so we do not repeat it."""
+    client = get_client()
+    (
+        client.table("watchlist_items")
+        .update({"notified": True})
+        .eq("id", item_id)
+        .execute()
+    )
