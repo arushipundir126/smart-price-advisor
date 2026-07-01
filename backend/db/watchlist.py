@@ -91,6 +91,30 @@ def list_for_session(session_id: str) -> list[dict]:
     return items
 
 
+def get_all_active() -> list[dict]:
+    """Every not-yet-bought watched item across all sessions, with product name.
+
+    Used by the daily cron to refresh prices and flag items that hit their target.
+    """
+    client = get_client()
+    result = (
+        client.table("watchlist_items")
+        .select("id, product_id, target_price, notified, products(name)")
+        .eq("purchased", False)
+        .execute()
+    )
+    return [
+        {
+            "id": r["id"],
+            "product_id": r["product_id"],
+            "target_price": r["target_price"],
+            "notified": r["notified"],
+            "name": (r.get("products") or {}).get("name"),
+        }
+        for r in result.data
+    ]
+
+
 def remove_item(session_id: str, product_id: str) -> None:
     """Remove one product from a session's watchlist."""
     client = get_client()

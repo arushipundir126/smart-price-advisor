@@ -1,0 +1,246 @@
+/*
+ * FILE: frontend/src/index.css
+ *
+ * WHAT THIS DOES:
+ * The design system: colour tokens (light and dark), typography, spacing, and
+ * shared interaction styles (lift plus shadow hover, focus ring). No web fonts,
+ * to stay fast on slow 4G.
+ *
+ * CHANGES THIS SESSION:
+ * - Created tokens, base resets, and shared button/card/chip styles.
+ *
+ * WHERE IT FITS:
+ * Imported once by main.tsx. Every component uses these variables and classes.
+ *
+ * CALLED BY / IMPORTS FROM:
+ * Imported by src/main.tsx.
+ */
+
+:root {
+  --bg: #f6f7f9;
+  --bg-card: #ffffff;
+  --bg-subtle: #eef1f5;
+  --text: #1a1d21;
+  --text-muted: #5b6572;
+  --border: #dfe3e8;
+  --shadow: 0 6px 20px rgba(20, 24, 31, 0.1);
+
+  --primary: #2563eb;
+  --buy: #1f9d55;
+  --wait: #d4861f;
+
+  --buy-bg: #e7f5ee;
+  --wait-bg: #fbf0dd;
+
+  --radius-card: 12px;
+  --radius: 8px;
+
+  --fs-2xl: 30px;
+  --fs-xl: 22px;
+  --fs-lg: 18px;
+  --fs-base: 16px;
+  --fs-sm: 14px;
+  --fs-xs: 12px;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b;
+    --bg-card: #1c2026;
+    --bg-subtle: #262b32;
+    --text: #eef1f5;
+    --text-muted: #9aa4b1;
+    --border: #313842;
+    --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+
+    --buy-bg: #143026;
+    --wait-bg: #3a2c14;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* Numbers align nicely (prices, targets). */
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.section-label {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* Card surface. */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  padding: var(--sp-6);
+}
+
+/* Shared interactive lift: rise plus shadow on hover, press down on click. */
+.interactive {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+}
+.interactive:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.interactive:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+.interactive:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Visible focus for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Buttons. */
+.btn {
+  font-size: var(--fs-base);
+  font-weight: 600;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  padding: 12px 16px;
+}
+.btn-primary {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #ffffff;
+}
+.btn-block {
+  width: 100%;
+}
+
+/* Inputs. */
+.input {
+  width: 100%;
+  font-size: var(--fs-base);
+  color: var(--text);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+
+/* Loading skeleton: a gentle pulse, no spinner, no blank screen. */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+.skeleton {
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* Watchlist side panel: slides in from the right with a dim backdrop. */
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  z-index: 40;
+}
+.backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.side-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: min(360px, 88vw);
+  background: var(--bg-card);
+  border-left: 1px solid var(--border);
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+}
+.side-panel.open {
+  transform: translateX(0);
+}
+.side-panel__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--sp-4);
+  border-bottom: 1px solid var(--border);
+}
+.side-panel__body {
+  overflow-y: auto;
+  padding: var(--sp-4);
+  flex: 1;
+}
+
+/* Confidence band chip. Colour plus the word, never colour alone. */
+.chip {
+  display: inline-block;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}

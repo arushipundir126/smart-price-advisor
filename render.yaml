@@ -1,0 +1,59 @@
+# FILE: render.yaml
+#
+# WHAT THIS DOES:
+# Render blueprint. Defines the FastAPI web service and the daily watchlist cron
+# in one file, so the backend deploys from git with the right commands.
+#
+# CHANGES THIS SESSION:
+# - Created the web service and the daily price-refresh cron.
+#
+# WHERE IT FITS:
+# Render reads this to build and run the backend. Secrets are set in the Render
+# dashboard (sync: false), never committed.
+#
+# CALLED BY / IMPORTS FROM:
+# Runs backend/main.py (web) and backend/jobs/refresh_watchlist_prices.py (cron).
+
+services:
+  - type: web
+    name: smart-price-advisor-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: APIFY_API_TOKEN
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false
+      - key: NEWSAPI_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: DATA_GOV_API_KEY
+        sync: false
+
+  - type: cron
+    name: watchlist-daily-refresh
+    runtime: python
+    rootDir: backend
+    schedule: "0 3 * * *"  # every day at 03:00 UTC
+    buildCommand: pip install -r requirements.txt
+    startCommand: python -m jobs.refresh_watchlist_prices
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: APIFY_API_TOKEN
+        sync: false
+      - key: SERPAPI_KEY
+        sync: false

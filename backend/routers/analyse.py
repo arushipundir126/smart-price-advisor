@@ -167,6 +167,9 @@ def analyse(req: AnalyseRequest, request: Request):
         "best_platform": s_cross.get("best_platform_label"),
         "buy_link": s_cross.get("buy_link"),
         "price_vs_median": s_fake.get("price_vs_median"),
+        # Oldest to newest price points for the sparkline, plus the median line.
+        "price_history": [float(s["price"]) for s in reversed(snapshots)],
+        "price_median": median,
         "next_sale": next_sale_out,
         "stackable_discounts": verdict.get("stackable_discounts", []),
         "signal_summaries": verdict.get("signal_summaries", []),
