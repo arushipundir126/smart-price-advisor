@@ -13,9 +13,10 @@ CHANGES THIS SESSION:
 - Added _clean_results(): filters out accessories, used/refurbished listings,
   titles that do not match the query, and absurd low-price outliers, so the best
   price reflects the actual new product and not a cover or a Rs 1 junk listing.
-- Restrict to trusted marketplaces (_is_trusted): only Amazon, Flipkart, Croma,
-  Reliance, Tata, JioMart, Nykaa, Apple and other trusted sellers can be the
-  recommended price, so unknown resellers and refurbished-phone sites are dropped.
+- Restrict to trusted marketplaces (_is_trusted): only trusted Indian stores and
+  official brand stores can be the recommended price, so unknown resellers and
+  refurbished-phone sites are dropped. Widened the list (quick commerce, health,
+  home, brand stores) and switched to safe whole-word matching.
 - Longer timeout and one retry, because the free tier sometimes returns an empty
   result on the first attempt.
 
@@ -69,15 +70,32 @@ _VARIANT_TERMS = {
     "fe", "plus", "ultra", "pro", "max", "mini", "lite", "neo", "prime", "air",
 }
 
-# Trusted Indian marketplaces (and official brand stores). We only surface prices
-# from these, so a cheap listing from an unknown reseller or a refurbished-phone
-# site never becomes the recommended price. Matched as a substring of the seller
-# name, so 'JioMart Electronics' and 'Reliance Digital' both match.
+# Trusted Indian marketplaces, verticals and official brand stores. We only
+# surface prices from these, so a cheap listing from an unknown reseller or a
+# refurbished-phone site never becomes the recommended price. Matched as whole
+# words (see _is_trusted), so 'JioMart Electronics' and 'Reliance Digital' match
+# but a short brand like 'mi' cannot match inside an unrelated word.
 _TRUSTED_SELLERS = {
-    "amazon", "flipkart", "croma", "reliance digital", "reliance", "tata cliq",
-    "tatacliq", "tata neu", "tataneu", "tata", "vijay sales", "vijaysales",
-    "myntra", "ajio", "nykaa", "jiomart", "jio mart", "snapdeal", "meesho",
-    "apple", "poorvika", "sangeetha", "shopclues", "paytm mall",
+    # Big marketplaces
+    "amazon", "flipkart", "shopsy", "snapdeal", "meesho", "shopclues",
+    "paytm mall", "jiomart", "jio mart",
+    # Electronics / omni-channel retailers
+    "croma", "reliance digital", "reliance", "vijay sales", "vijaysales",
+    "poorvika", "sangeetha", "sathya", "girias", "unic", "bajaj electronics",
+    # Tata group
+    "tata cliq", "tatacliq", "tata neu", "tataneu", "tata",
+    # Fashion / beauty
+    "myntra", "ajio", "nykaa", "tira", "purplle", "lenskart", "fabindia",
+    # Grocery / quick commerce
+    "blinkit", "zepto", "bigbasket", "big basket", "dmart", "instamart",
+    # Health / kids / home
+    "healthkart", "1mg", "netmeds", "pharmeasy", "apollo", "firstcry",
+    "pepperfry", "urban ladder", "urbanladder", "wooden street", "ikea",
+    "decathlon",
+    # Official brand stores
+    "apple", "samsung", "xiaomi", "oneplus", "realme", "oppo", "vivo",
+    "motorola", "nokia", "asus", "dell", "lenovo", "sony", "bosch", "philips",
+    "dyson", "titan", "fastrack", "boat", "jbl", "noise", "pixel",
 }
 
 # Mock sellers for demo products. Deliberately includes marketplaces the Apify
@@ -132,9 +150,16 @@ def _matches_query(title: str, tokens: list[str]) -> bool:
 
 
 def _is_trusted(seller: str) -> bool:
-    """True if the seller is a trusted Indian marketplace or brand store."""
+    """True if the seller is a trusted Indian marketplace or brand store.
+
+    Matches whole words only, so 'amazon.in' and 'boat-lifestyle.com' match but a
+    short name never fires inside an unrelated word (for example 'apple' will not
+    match 'pineapple store').
+    """
     s = seller.lower()
-    return any(name in s for name in _TRUSTED_SELLERS)
+    return any(
+        re.search(rf"\b{re.escape(name)}\b", s) for name in _TRUSTED_SELLERS
+    )
 
 
 def _wrong_variant(title: str, tokens: list[str]) -> bool:
