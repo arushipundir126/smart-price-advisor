@@ -13,6 +13,9 @@ CHANGES THIS SESSION:
 - Added _clean_results(): filters out accessories, used/refurbished listings,
   titles that do not match the query, and absurd low-price outliers, so the best
   price reflects the actual new product and not a cover or a Rs 1 junk listing.
+- Restrict to trusted marketplaces (_is_trusted): only Amazon, Flipkart, Croma,
+  Reliance, Tata, JioMart, Nykaa, Apple and other trusted sellers can be the
+  recommended price, so unknown resellers and refurbished-phone sites are dropped.
 
 WHERE IT FITS:
 Second service client. Fills gaps left by Apify so Signal 2 (cross-platform best
@@ -59,6 +62,17 @@ _QUERY_STOPWORDS = {"the", "a", "an", "for", "with", "and", "new", "of", "in"}
 # Example: query 'Samsung Galaxy S24' must not match 'Galaxy S24 FE' or 'S24 Ultra'.
 _VARIANT_TERMS = {
     "fe", "plus", "ultra", "pro", "max", "mini", "lite", "neo", "prime", "air",
+}
+
+# Trusted Indian marketplaces (and official brand stores). We only surface prices
+# from these, so a cheap listing from an unknown reseller or a refurbished-phone
+# site never becomes the recommended price. Matched as a substring of the seller
+# name, so 'JioMart Electronics' and 'Reliance Digital' both match.
+_TRUSTED_SELLERS = {
+    "amazon", "flipkart", "croma", "reliance digital", "reliance", "tata cliq",
+    "tatacliq", "tata neu", "tataneu", "tata", "vijay sales", "vijaysales",
+    "myntra", "ajio", "nykaa", "jiomart", "jio mart", "snapdeal", "meesho",
+    "apple", "poorvika", "sangeetha", "shopclues", "paytm mall",
 }
 
 # Mock sellers for demo products. Deliberately includes marketplaces the Apify
@@ -112,6 +126,12 @@ def _matches_query(title: str, tokens: list[str]) -> bool:
     return all(tok in t for tok in tokens)
 
 
+def _is_trusted(seller: str) -> bool:
+    """True if the seller is a trusted Indian marketplace or brand store."""
+    s = seller.lower()
+    return any(name in s for name in _TRUSTED_SELLERS)
+
+
 def _wrong_variant(title: str, tokens: list[str]) -> bool:
     """True if the title is a different model than the user asked for.
 
@@ -142,6 +162,13 @@ def _clean_results(rows: list[dict], query: str) -> list[dict]:
     ]
     if not kept:
         return rows
+
+    # Prefer trusted marketplaces. If any trusted seller has this product, show
+    # only those, so an unknown reseller's cheap listing never wins. If none are
+    # trusted, we keep the cleaned list so a verdict is still possible.
+    trusted = [r for r in kept if _is_trusted(r.get("platform_label", ""))]
+    if trusted:
+        kept = trusted
 
     # Sanity floor: nothing priced below 40% of the median is the same new item.
     if len(kept) >= 3:
