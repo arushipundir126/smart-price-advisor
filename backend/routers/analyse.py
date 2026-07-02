@@ -191,7 +191,17 @@ def _rows_from_snapshots(snapshots: list[dict], product: str) -> list[dict]:
                 "url": search,
                 "source": "last_known",
             }
-    return list(seen.values())
+    rows = list(seen.values())
+
+    # Extra safety: even in the fallback, drop any implausibly low outlier so a
+    # stray junk snapshot can never resurface as the best price. Anything below
+    # 40% of the median of the fallback set is treated as junk.
+    if len(rows) >= 3:
+        median = statistics.median(r["price"] for r in rows)
+        floored = [r for r in rows if r["price"] >= median * 0.40]
+        if floored:
+            rows = floored
+    return rows
 
 
 @router.post("/analyse")
