@@ -10,6 +10,8 @@ a drop as already notified.
 CHANGES THIS SESSION:
 - Added add_or_update_item(), list_for_session(), remove_item(),
   mark_purchased(), and mark_notified().
+- Store wait_tolerance_days per item and expose it plus last_checked, and added
+  get_active_for_session() so the on-open refresh can pace re-checks per item.
 
 WHERE IT FITS:
 Sits on top of db/supabase_client.py and reuses db/price_snapshots for the
@@ -29,17 +31,21 @@ from db.supabase_client import get_client
 # Named explicitly, never SELECT * (security rule).
 _COLUMNS = (
     "id, session_id, product_id, target_price, notified, purchased, "
-    "purchased_at, created_at, products(name, brand, category)"
+    "purchased_at, wait_tolerance_days, created_at, products(name, brand, category)"
 )
 
 
 def add_or_update_item(
-    session_id: str, product_id: str, target_price: Optional[float] = None
+    session_id: str,
+    product_id: str,
+    target_price: Optional[float] = None,
+    wait_tolerance_days: Optional[int] = None,
 ) -> dict:
     """Add a product to a session's watchlist, or update its target price.
 
-    Uses the unique (session_id, product_id) constraint so re-adding the same
-    product updates the existing row instead of creating a duplicate.
+    Stores the wait window so re-checks can be paced to it. Uses the unique
+    (session_id, product_id) constraint so re-adding the same product updates the
+    existing row instead of creating a duplicate.
     """
     client = get_client()
     result = (
@@ -49,12 +55,42 @@ def add_or_update_item(
                 "session_id": session_id,
                 "product_id": product_id,
                 "target_price": target_price,
+                "wait_tolerance_days": wait_tolerance_days,
             },
             on_conflict="session_id,product_id",
         )
         .execute()
     )
     return result.data[0]
+
+
+def get_active_for_session(session_id: str) -> list[dict]:
+    """Not-yet-bought items for one session, with product name and wait window.
+
+    Used by the on-open refresh to decide which items are due for a re-check.
+    """
+    client = get_client()
+    result = (
+        client.table("watchlist_items")
+        .select(
+            "id, product_id, target_price, notified, wait_tolerance_days, "
+            "products(name)"
+        )
+        .eq("session_id", session_id)
+        .eq("purchased", False)
+        .execute()
+    )
+    return [
+        {
+            "id": r["id"],
+            "product_id": r["product_id"],
+            "target_price": r["target_price"],
+            "notified": r["notified"],
+            "wait_tolerance_days": r.get("wait_tolerance_days"),
+            "name": (r.get("products") or {}).get("name"),
+        }
+        for r in result.data
+    ]
 
 
 def list_for_session(session_id: str) -> list[dict]:
@@ -73,6 +109,7 @@ def list_for_session(session_id: str) -> list[dict]:
         latest = get_snapshots(row["product_id"], limit=1)
         latest_price = float(latest[0]["price"]) if latest else None
         latest_platform = latest[0]["platform"] if latest else None
+        last_checked = latest[0]["recorded_at"] if latest else None
         product = row.get("products") or {}
         items.append(
             {
@@ -84,8 +121,10 @@ def list_for_session(session_id: str) -> list[dict]:
                 "notified": row["notified"],
                 "purchased": row["purchased"],
                 "purchased_at": row["purchased_at"],
+                "wait_tolerance_days": row.get("wait_tolerance_days"),
                 "latest_price": latest_price,
                 "latest_platform": latest_platform,
+                "last_checked": last_checked,
             }
         )
     return items

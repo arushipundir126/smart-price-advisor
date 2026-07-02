@@ -7,6 +7,8 @@
 -- CHANGES THIS SESSION:
 -- - Initial schema: products, price_snapshots, sale_calendar, watchlist_items,
 --   news_cache, with foreign keys and indexes.
+-- - Added watchlist_items.wait_tolerance_days (drives the adaptive re-check
+--   cadence), with a safe ALTER for tables created before this column.
 --
 -- WHERE IT FITS:
 -- The database foundation. The db/ Python files read from and write to these
@@ -63,10 +65,11 @@ create table if not exists watchlist_items (
     session_id    text not null,
     product_id    uuid not null references products (id) on delete cascade,
     target_price  numeric(10, 2),
-    notified      boolean not null default false,
-    purchased     boolean not null default false,   -- user marked it as bought
-    purchased_at  timestamptz,                       -- when they bought it
-    created_at    timestamptz not null default now(),
+    notified            boolean not null default false,
+    purchased           boolean not null default false,   -- user marked it as bought
+    purchased_at        timestamptz,                       -- when they bought it
+    wait_tolerance_days integer,                           -- drives re-check cadence
+    created_at          timestamptz not null default now(),
     -- One watch per product per session; re-adding updates the same row.
     unique (session_id, product_id)
 );
@@ -75,9 +78,10 @@ create table if not exists watchlist_items (
 create index if not exists idx_watchlist_session
     on watchlist_items (session_id);
 
--- If watchlist_items existed before the "bought" columns, add them safely.
+-- If watchlist_items existed before these columns, add them safely.
 alter table watchlist_items add column if not exists purchased boolean not null default false;
 alter table watchlist_items add column if not exists purchased_at timestamptz;
+alter table watchlist_items add column if not exists wait_tolerance_days integer;
 
 -- News cache: raw NewsAPI results kept for one hour to save API quota.
 create table if not exists news_cache (

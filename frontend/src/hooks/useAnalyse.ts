@@ -8,6 +8,7 @@
  *
  * CHANGES THIS SESSION:
  * - Created the hook, the Verdict type, and friendly error mapping.
+ * - Added PlatformPrice type and platform_prices field for the comparison list.
  *
  * WHERE IT FITS:
  * Backs the search-to-verdict flow. Consumed by App and the verdict components.
@@ -37,6 +38,12 @@ export interface NextSale {
   platform: string;
 }
 
+export interface PlatformPrice {
+  platform: string;
+  price: number;
+  buy_link: string | null;
+}
+
 export interface Verdict {
   product: string;
   category: string | null;
@@ -53,6 +60,7 @@ export interface Verdict {
   next_sale: NextSale | null;
   stackable_discounts: Discount[];
   signal_summaries: SignalSummary[];
+  platform_prices: PlatformPrice[];
   product_id: string | null;
 }
 

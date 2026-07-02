@@ -11,6 +11,8 @@ verdict object the frontend consumes. Rate limited to 10 requests per minute.
 CHANGES THIS SESSION:
 - Replaced the stub with the full orchestration, brand/vague check, category
   guess, best-effort DB use, six-signal run, and verdict assembly.
+- Build signal_summaries and stackable_discounts from our own six signal objects
+  instead of Gemini's echo, so all six always show and discounts never vanish.
 
 WHERE IT FITS:
 The main user-facing endpoint and the join point of the analysis engine.
@@ -19,6 +21,9 @@ CALLED BY / IMPORTS FROM:
 Imports the six signals, the aggregator, the service clients, the db helpers, and
 the shared limiter. Mounted by main.py.
 """
+import re
+import statistics
+
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
@@ -38,11 +43,42 @@ from signals import (
 
 router = APIRouter(prefix="/api", tags=["analyse"])
 
-# Single generic words that are not specific enough for a verdict (no brand).
-_VAGUE_TERMS = {
-    "phone", "mobile", "laptop", "tv", "television", "shoes", "shoe",
-    "watch", "headphones", "earphones", "fridge", "ac", "washing machine",
+# Generic category words. A query made of ONLY these (plus descriptors, sizes
+# and numbers) has no brand, so we ask the user to name one. This is a superset
+# of common Indian shopping categories, not an exhaustive list.
+_GENERIC_TERMS = {
+    "phone", "mobile", "smartphone", "laptop", "computer", "pc", "tablet", "tab",
+    "tv", "television", "shoes", "shoe", "sneakers", "sandals", "slippers",
+    "watch", "smartwatch", "headphones", "headphone", "earphones", "earphone",
+    "earbuds", "speaker", "soundbar", "fridge", "refrigerator", "ac",
+    "conditioner", "microwave", "mixer", "grinder", "kettle", "toaster", "oven",
+    "washing", "machine", "camera", "mouse", "keyboard", "monitor", "charger",
+    "powerbank", "oil", "rice", "atta", "flour", "wheat", "sugar", "salt", "dal",
+    "milk", "bread", "butter", "ghee", "tea", "coffee", "shampoo", "soap",
+    "toothpaste", "facewash", "wash", "face", "moisturizer", "moisturiser",
+    "cream", "lotion", "serum", "foundation", "lipstick", "kajal", "mascara",
+    "perfume", "deodorant", "sunscreen", "book", "notebook", "pen", "bag",
+    "backpack", "jeans", "shirt", "tshirt", "dress", "kurta", "saree", "jacket",
+    "trousers", "top", "petrol", "diesel", "fuel", "power", "bank",
 }
+
+# Descriptor words that qualify a product but do NOT identify a brand.
+_DESCRIPTOR_TERMS = {
+    "sunflower", "mustard", "coconut", "olive", "groundnut", "soybean", "soya",
+    "vegetable", "cooking", "refined", "virgin", "extra", "pure", "organic",
+    "basmati", "brown", "white", "black", "blue", "green", "red", "matte",
+    "liquid", "dewy", "wireless", "bluetooth", "smart", "gaming", "running",
+    "sports", "casual", "formal", "mens", "womens", "kids", "men", "women",
+    "unisex", "cotton", "silk", "leather", "herbal", "ayurvedic", "whitening",
+    "anti", "dandruff", "moisturizing", "hydrating", "premium", "deluxe",
+    "classic", "original", "fresh", "natural", "gold", "super", "combo", "pack",
+    "set", "piece", "pcs", "size", "large", "medium", "small", "new",
+}
+
+# A token that is only a number, or a number with a unit (1l, 500ml, 128gb).
+_UNIT_RE = re.compile(
+    r"^\d+(ml|l|kg|g|gm|gb|tb|mm|cm|inch|in|w|ltr|litre|liter|pack)?$"
+)
 
 # Keyword -> category guesses. First match wins; order matters.
 _CATEGORY_HINTS = [
@@ -80,8 +116,54 @@ def _guess_category(name: str) -> str | None:
 
 
 def _is_vague(name: str) -> bool:
-    """True when the query is a bare generic term with no brand or model."""
-    return name.strip().lower() in _VAGUE_TERMS
+    """True when the query names a category but no brand.
+
+    Strips generic category words, descriptors, sizes and numbers. If nothing is
+    left, there is no brand token, so we cannot give an accurate verdict and ask
+    the user to add one. 'sunflower oil' -> vague; 'Fortune sunflower oil' -> ok.
+    """
+    tokens = re.findall(r"[a-z0-9]+", name.lower())
+    if not tokens:
+        return True
+    for tok in tokens:
+        if tok in _GENERIC_TERMS or tok in _DESCRIPTOR_TERMS:
+            continue
+        if _UNIT_RE.match(tok):
+            continue
+        # A word we do not recognise as generic is treated as a brand/model.
+        return False
+    return True
+
+
+def _platform_prices(price_rows: list[dict], limit: int = 6) -> list[dict]:
+    """Cheapest price per platform, sorted low to high, for the comparison list.
+
+    Lets the user see the price across trusted sellers, not just the single best.
+    """
+    cheapest: dict[str, dict] = {}
+    for row in price_rows:
+        label = row.get("platform_label") or row.get("platform") or "Seller"
+        price = float(row["price"])
+        if label not in cheapest or price < cheapest[label]["price"]:
+            cheapest[label] = {
+                "platform": label,
+                "price": price,
+                "buy_link": row.get("url"),
+            }
+    return sorted(cheapest.values(), key=lambda r: r["price"])[:limit]
+
+
+def _clean_snapshots(snapshots: list[dict]) -> list[dict]:
+    """Drop outlier snapshots so old junk (Rs 1, accessories) does not skew the
+    median, the trend, or the chart. Keeps points within 40% to 300% of the
+    median. Snapshots are append-only in the DB, so we filter here for display.
+    """
+    prices = [float(s["price"]) for s in snapshots if s.get("price") is not None]
+    if len(prices) < 3:
+        return snapshots
+    median = statistics.median(prices)
+    lo, hi = median * 0.40, median * 3.0
+    return [s for s in snapshots if lo <= float(s["price"]) <= hi]
 
 
 @router.post("/analyse")
@@ -111,7 +193,7 @@ def analyse(req: AnalyseRequest, request: Request):
     next_sale = None
     try:
         from db.products import find_or_create_product
-        from db.price_snapshots import add_snapshot, get_median_price, get_snapshots
+        from db.price_snapshots import add_snapshot, get_snapshots
         from db.sale_calendar import get_next_sale
 
         record = find_or_create_product(product, category=category)
@@ -121,8 +203,10 @@ def analyse(req: AnalyseRequest, request: Request):
             add_snapshot(
                 product_id, row["platform"], row["price"], row.get("mrp")
             )
-        median = get_median_price(product_id)
-        snapshots = get_snapshots(product_id)
+        snapshots = _clean_snapshots(get_snapshots(product_id))
+        # Median from the cleaned history so junk points do not distort it.
+        clean_prices = [float(s["price"]) for s in snapshots]
+        median = statistics.median(clean_prices) if clean_prices else None
         next_sale = get_next_sale(category)
     except Exception:
         pass  # degrade gracefully; verdict still produced
@@ -156,6 +240,22 @@ def analyse(req: AnalyseRequest, request: Request):
             "platform": next_sale.get("platform"),
         }
 
+    # Build the signal breakdown and stackable discounts from OUR six signals,
+    # not from Gemini's retelling, so all six always show with their real votes
+    # and reasons, and bank offers/coupons never silently vanish.
+    signal_summaries = [
+        {
+            "signal": s.get("signal_name", "signal"),
+            "vote": s.get("vote"),
+            "plain_reason": s.get("reason", ""),
+        }
+        for s in signals
+    ]
+    stackable_discounts = []
+    for s in signals:
+        for offer in s.get("stackable_discounts", []) or []:
+            stackable_discounts.append(offer)
+
     return {
         "product": product,
         "category": category,
@@ -171,7 +271,8 @@ def analyse(req: AnalyseRequest, request: Request):
         "price_history": [float(s["price"]) for s in reversed(snapshots)],
         "price_median": median,
         "next_sale": next_sale_out,
-        "stackable_discounts": verdict.get("stackable_discounts", []),
-        "signal_summaries": verdict.get("signal_summaries", []),
+        "stackable_discounts": stackable_discounts,
+        "signal_summaries": signal_summaries,
+        "platform_prices": _platform_prices(price_rows),
         "product_id": product_id,
     }

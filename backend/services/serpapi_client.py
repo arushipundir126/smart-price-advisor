@@ -10,6 +10,9 @@ real call when SERPAPI_KEY is set, otherwise built-in mock data.
 CHANGES THIS SESSION:
 - Added fetch_shopping_prices() with a real SerpAPI path and mock demo data,
   returning the same result shape as services/apify_client.
+- Added _clean_results(): filters out accessories, used/refurbished listings,
+  titles that do not match the query, and absurd low-price outliers, so the best
+  price reflects the actual new product and not a cover or a Rs 1 junk listing.
 
 WHERE IT FITS:
 Second service client. Fills gaps left by Apify so Signal 2 (cross-platform best
@@ -21,11 +24,42 @@ Reads SERPAPI_KEY from the environment. Imports httpx lazily (only in the real
 path). Uses normalise_name from db/products for demo matching.
 """
 import os
+import re
+import statistics
 
 from db.products import normalise_name
 
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
 REQUEST_TIMEOUT_SECONDS = 10
+
+# Words that mean the listing is an ACCESSORY, not the product itself. Google
+# Shopping mixes these in under the same search, and they are far cheaper, so the
+# cheapest result is usually a case or a cable, not the phone. We drop them.
+_ACCESSORY_TERMS = {
+    "case", "cover", "back cover", "flip cover", "pouch", "sleeve", "skin",
+    "protector", "screen guard", "tempered glass", "tempered", "guard",
+    "cable", "charger", "adapter", "holder", "mount", "stand", "ring",
+    "strap", "band", "lens", "camera protector", "grip", "stylus", "dock",
+    "keyboard", "sticker", "decal", "film",
+}
+
+# Words that mean the listing is NOT a new unit. Real phones, but sold used or
+# refurbished at much lower prices, so they wrongly win "best price". Dropped.
+_CONDITION_TERMS = {
+    "refurbished", "refurb", "renewed", "pre-owned", "preowned", "pre owned",
+    "used", "second hand", "secondhand", "open box", "openbox", "open-box",
+    "without box", "no box", "as-is", "as is", "seconds", "damaged", "repair",
+}
+
+# Short/common words we ignore when checking that a title matches the query.
+_QUERY_STOPWORDS = {"the", "a", "an", "for", "with", "and", "new", "of", "in"}
+
+# Model-variant words. If the user did not ask for one of these but the listing
+# has it, it is a different (usually pricier or cheaper) model, so we drop it.
+# Example: query 'Samsung Galaxy S24' must not match 'Galaxy S24 FE' or 'S24 Ultra'.
+_VARIANT_TERMS = {
+    "fe", "plus", "ultra", "pro", "max", "mini", "lite", "neo", "prime", "air",
+}
 
 # Mock sellers for demo products. Deliberately includes marketplaces the Apify
 # mock does not, to show SerpAPI widening the coverage. Prices in INR.
@@ -50,6 +84,73 @@ _MOCK_SHOPPING: dict[str, list[dict]] = {
 def _real_enabled() -> bool:
     """True only when a SerpAPI key is configured."""
     return bool(os.getenv("SERPAPI_KEY"))
+
+
+def _is_accessory_or_used(title: str) -> bool:
+    """True if the listing title looks like an accessory or a non-new unit."""
+    t = f" {title.lower()} "
+    for term in _ACCESSORY_TERMS | _CONDITION_TERMS:
+        # Match on word boundaries so 'case' does not fire inside 'staircase'.
+        if re.search(rf"\b{re.escape(term)}\b", t):
+            return True
+    return False
+
+
+def _query_tokens(query: str) -> list[str]:
+    """Meaningful lowercase words from the query, stopwords removed."""
+    words = re.findall(r"[a-z0-9]+", query.lower())
+    return [w for w in words if w not in _QUERY_STOPWORDS]
+
+
+def _matches_query(title: str, tokens: list[str]) -> bool:
+    """True if the title contains every meaningful word from the query.
+
+    Keeps 'Apple iPhone 14 128GB' for the query 'iPhone 14' but rejects an
+    unrelated cheap item that happens to appear in the same shopping results.
+    """
+    t = title.lower()
+    return all(tok in t for tok in tokens)
+
+
+def _wrong_variant(title: str, tokens: list[str]) -> bool:
+    """True if the title is a different model than the user asked for.
+
+    Fires when the title carries a variant word (FE, Pro, Ultra, Plus, ...) that
+    the query did not, so 'Galaxy S24' does not get answered with an 'S24 FE'.
+    """
+    title_words = set(re.findall(r"[a-z0-9]+", title.lower()))
+    query_set = set(tokens)
+    return any(v in title_words and v not in query_set for v in _VARIANT_TERMS)
+
+
+def _clean_results(rows: list[dict], query: str) -> list[dict]:
+    """Keep only rows that are the actual product, not accessories or junk.
+
+    Steps: drop accessories/used listings, drop rows whose title does not match
+    the query, then drop absurd low outliers (below 40% of the median of what
+    survives, which removes stray Rs 1 / Rs 99 listings). If filtering would
+    remove everything (for example the user really did search for a cover), the
+    original rows are returned so an honest price is still shown.
+    """
+    tokens = _query_tokens(query)
+    kept = [
+        r
+        for r in rows
+        if not _is_accessory_or_used(r.get("product_name", ""))
+        and _matches_query(r.get("product_name", ""), tokens)
+        and not _wrong_variant(r.get("product_name", ""), tokens)
+    ]
+    if not kept:
+        return rows
+
+    # Sanity floor: nothing priced below 40% of the median is the same new item.
+    if len(kept) >= 3:
+        median = statistics.median(r["price"] for r in kept)
+        floor = median * 0.40
+        floored = [r for r in kept if r["price"] >= floor]
+        if floored:
+            kept = floored
+    return kept
 
 
 def _fetch_mock(product_name: str) -> list[dict]:
@@ -108,11 +209,12 @@ def _fetch_real(product_name: str) -> list[dict]:
                 "product_name": item.get("title") or product_name,
                 "price": float(price),
                 "mrp": None,
-                "url": item.get("product_link") or item.get("link"),
+                # Prefer a direct merchant link; fall back to the Google page.
+                "url": item.get("link") or item.get("product_link"),
                 "source": "serpapi",
             }
         )
-    return results
+    return _clean_results(results, product_name)
 
 
 def fetch_shopping_prices(product_name: str) -> list[dict]:

@@ -8,6 +8,8 @@
  *
  * CHANGES THIS SESSION:
  * - Created the hook, the WatchlistItem type, and the four actions.
+ * - add() now sends the wait window, and checkPrices() calls the on-open refresh
+ *   endpoint that re-checks due items at an adaptive, per-item interval.
  *
  * WHERE IT FITS:
  * Backs the watchlist side panel and the "alert me" button.
@@ -30,8 +32,10 @@ export interface WatchlistItem {
   notified: boolean;
   purchased: boolean;
   purchased_at: string | null;
+  wait_tolerance_days: number | null;
   latest_price: number | null;
   latest_platform: string | null;
+  last_checked: string | null;
 }
 
 const FRIENDLY_ERROR =
@@ -43,6 +47,7 @@ export function useWatchlist() {
   const [error, setError] = useState<string | null>(null);
   const sessionId = getSessionId();
 
+  // Quick list, no price re-fetch. Used after add/remove/mark to update the UI.
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -61,7 +66,35 @@ export function useWatchlist() {
     }
   }, [sessionId]);
 
-  async function add(productId: string, targetPrice: number | null) {
+  // On app open: re-check prices for items whose adaptive interval has elapsed.
+  // The server decides which items are due, so calling this on every open is
+  // safe and never over-checks.
+  const checkPrices = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const resp = await fetch(
+        `${API_BASE}/api/watchlist/${sessionId}/refresh`,
+        { method: "POST" }
+      );
+      const json = await resp.json();
+      if (!resp.ok || json.error) {
+        setError(json.message ?? FRIENDLY_ERROR);
+        return;
+      }
+      setItems(json.items ?? []);
+    } catch {
+      setError(FRIENDLY_ERROR);
+    } finally {
+      setLoading(false);
+    }
+  }, [sessionId]);
+
+  async function add(
+    productId: string,
+    targetPrice: number | null,
+    waitToleranceDays: number | null = null
+  ) {
     try {
       const resp = await fetch(`${API_BASE}/api/watchlist`, {
         method: "POST",
@@ -70,6 +103,7 @@ export function useWatchlist() {
           session_id: sessionId,
           product_id: productId,
           target_price: targetPrice,
+          wait_tolerance_days: waitToleranceDays,
         }),
       });
       const json = await resp.json();
@@ -104,5 +138,5 @@ export function useWatchlist() {
     }
   }
 
-  return { items, loading, error, refresh, add, remove, markBought };
+  return { items, loading, error, refresh, checkPrices, add, remove, markBought };
 }

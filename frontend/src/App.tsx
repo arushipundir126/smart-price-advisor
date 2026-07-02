@@ -5,12 +5,15 @@
  * The app shell and screen controller. Holds the search screen (product input,
  * wait picker, recent searches) and the result screen (verdict card, action
  * strip, discounts, signal breakdown, watchlist button, sparkline), plus the
- * slide-in watchlist panel and the drop-alert banner. Refreshes the watchlist
- * at most once a day, and immediately when the panel is opened.
+ * slide-in watchlist panel and the drop-alert banner. On open it re-checks
+ * watched prices at an adaptive, per-item interval (server-throttled).
  *
  * CHANGES THIS SESSION:
  * - Replaced the placeholder shell with the full search-to-verdict flow, the
  *   watchlist panel toggle, recent searches, and the alert banner.
+ * - Added the cross-platform price comparison list, passed the wait window when
+ *   adding to the watchlist, and switched on-open refresh to the adaptive
+ *   price re-check endpoint.
  *
  * WHERE IT FITS:
  * The root component. Wires the hooks to the components.
@@ -34,10 +37,9 @@ import WatchlistButton from "./components/WatchlistButton";
 import WatchlistPanel from "./components/WatchlistPanel";
 import { useAnalyse } from "./hooks/useAnalyse";
 import { useWatchlist } from "./hooks/useWatchlist";
+import { formatInr, safeHttpUrl } from "./utils/formatting";
 
 const RECENT_KEY = "spa_recent_searches";
-const REFRESH_KEY = "spa_watchlist_refreshed_at";
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 function loadRecent(): string[] {
   try {
@@ -57,20 +59,17 @@ export default function App() {
   const { loading, data, error, analyse, reset } = useAnalyse();
   const watchlist = useWatchlist();
 
-  // Refresh the watchlist at most once a day on load (for the alert banner).
-  const { refresh } = watchlist;
+  // On app open, re-check watched prices. The server only re-checks items whose
+  // adaptive interval has elapsed, so opening many times a day does not overcheck.
+  const { checkPrices } = watchlist;
   useEffect(() => {
-    const last = Number(localStorage.getItem(REFRESH_KEY) ?? 0);
-    if (Date.now() - last > DAY_MS) {
-      refresh();
-      localStorage.setItem(REFRESH_KEY, String(Date.now()));
-    }
-  }, [refresh]);
+    checkPrices();
+  }, [checkPrices]);
 
   const openPanel = useCallback(() => {
     setPanelOpen(true);
-    refresh(); // opening is an explicit intent, so read the latest
-  }, [refresh]);
+    checkPrices(); // opening is an explicit intent, so read the latest
+  }, [checkPrices]);
 
   function rememberRecent(term: string) {
     const next = [term, ...recent.filter((r) => r !== term)].slice(0, 5);
@@ -164,8 +163,59 @@ export default function App() {
               <WatchlistButton
                 productId={data.product_id}
                 defaultTarget={data.best_price}
-                onAdd={watchlist.add}
+                onAdd={(productId, target) =>
+                  watchlist.add(productId, target, waitDays)
+                }
               />
+              {data.platform_prices && data.platform_prices.length > 1 && (
+                <div className="card">
+                  <p className="section-label">Prices across platforms</p>
+                  <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                    {data.platform_prices.map((p, i) => {
+                      const href = safeHttpUrl(p.buy_link);
+                      const row = (
+                        <>
+                          <span>{p.platform}</span>
+                          <span className="mono">{formatInr(p.price)}</span>
+                        </>
+                      );
+                      return (
+                        <li key={`${p.platform}-${i}`}>
+                          {href ? (
+                            <a
+                              className="interactive"
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                padding: "10px 12px",
+                                borderRadius: 8,
+                                textDecoration: "none",
+                                color: "inherit",
+                                cursor: "pointer",
+                              }}
+                            >
+                              {row}
+                            </a>
+                          ) : (
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                padding: "10px 12px",
+                              }}
+                            >
+                              {row}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
               <StackableDiscounts discounts={data.stackable_discounts} />
               <SignalBreakdown signals={data.signal_summaries} />
               <PriceSparkline prices={data.price_history} median={data.price_median} />
