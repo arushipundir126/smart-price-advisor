@@ -67,8 +67,10 @@
   --sp-8: 32px;
 }
 
+/* Dark palette. Applied automatically when the system is dark (unless the user
+   forced light), and always when the user picks dark via the header toggle. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0b0f19;
     --bg-card: #131826;
     --bg-subtle: #1b2233;
@@ -85,6 +87,24 @@
     --buy-grad: linear-gradient(150deg, #12261e 0%, #131826 62%);
     --wait-grad: linear-gradient(150deg, #2a2011 0%, #131826 62%);
   }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0b0f19;
+  --bg-card: #131826;
+  --bg-subtle: #1b2233;
+  --text: #e8ebf2;
+  --text-muted: #94a3b8;
+  --border: #232a3b;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.55);
+
+  --buy-bg: #123024;
+  --wait-bg: #362811;
+  --buy-grad: linear-gradient(150deg, #12261e 0%, #131826 62%);
+  --wait-grad: linear-gradient(150deg, #2a2011 0%, #131826 62%);
 }
 
 * {
@@ -362,4 +382,91 @@ h3 {
   background: var(--bg-subtle);
   color: var(--text-muted);
   border-color: var(--border);
+}
+
+/* Icon-only toggle button (theme switch). */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
+}
+.icon-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.icon-btn:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Features grid: one column on phones, more on wider screens. */
+.feature-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--sp-4);
+}
+@media (min-width: 620px) {
+  .feature-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.feature-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+  margin-bottom: var(--sp-3);
+}
+
+/* Footer. */
+.footer {
+  margin-top: var(--sp-8);
+  padding-top: var(--sp-6);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.footer__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-6);
+  margin-top: var(--sp-6);
+}
+@media (min-width: 620px) {
+  .footer__cols {
+    grid-template-columns: 2fr 1fr 1fr;
+  }
+}
+.footer h4 {
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--text-muted);
+  margin: 0 0 var(--sp-3);
+  font-weight: 700;
+}
+.link-btn {
+  display: block;
+  background: none;
+  border: none;
+  padding: 6px 0;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: color 0.14s ease;
+}
+.link-btn:hover {
+  color: var(--accent);
 }

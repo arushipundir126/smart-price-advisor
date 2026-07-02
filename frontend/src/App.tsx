@@ -14,6 +14,9 @@
  * - Added the cross-platform price comparison list, passed the wait window when
  *   adding to the watchlist, and switched on-open refresh to the adaptive
  *   price re-check endpoint.
+ * - Landing structure: bold hero, features grid, footer with Product/Company/
+ *   Legal links, in-app info pages (About, Disclaimer, Privacy, Terms, Contact),
+ *   and a light/dark theme toggle that overrides the system setting.
  *
  * WHERE IT FITS:
  * The root component. Wires the hooks to the components.
@@ -26,6 +29,10 @@ import { useCallback, useEffect, useState } from "react";
 import ActionStrip from "./components/ActionStrip";
 import AlertBanner from "./components/AlertBanner";
 import ErrorState from "./components/ErrorState";
+import FeatureGrid from "./components/FeatureGrid";
+import Footer from "./components/Footer";
+import InfoPage from "./components/InfoPage";
+import type { InfoKey } from "./components/InfoPage";
 import LoadingState from "./components/LoadingState";
 import PriceSparkline from "./components/PriceSparkline";
 import SearchBar from "./components/SearchBar";
@@ -40,6 +47,18 @@ import { useWatchlist } from "./hooks/useWatchlist";
 import { formatInr, safeHttpUrl } from "./utils/formatting";
 
 const RECENT_KEY = "spa_recent_searches";
+const THEME_KEY = "spa_theme";
+
+type Theme = "light" | "dark";
+
+// Effective starting theme: a saved choice wins, else follow the system setting.
+function initialTheme(): Theme {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "light" || saved === "dark") return saved;
+  return window.matchMedia?.("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
 
 function loadRecent(): string[] {
   try {
@@ -55,9 +74,25 @@ export default function App() {
   const [screen, setScreen] = useState<"search" | "result">("search");
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [infoPage, setInfoPage] = useState<InfoKey | null>(null);
+  const [theme, setTheme] = useState<Theme>(initialTheme);
 
   const { loading, data, error, analyse, reset } = useAnalyse();
   const watchlist = useWatchlist();
+
+  // Apply the theme to the document root; the CSS reads [data-theme].
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  const toggleTheme = () =>
+    setTheme((t) => (t === "dark" ? "light" : "dark"));
+
+  const openInfo = useCallback((page: InfoKey) => {
+    setInfoPage(page);
+    window.scrollTo({ top: 0 });
+  }, []);
 
   // On app open, re-check watched prices. The server only re-checks items whose
   // adaptive interval has elapsed, so opening many times a day does not overcheck.
@@ -87,32 +122,73 @@ export default function App() {
   }
 
   function backToSearch() {
+    setInfoPage(null);
     setScreen("search");
     reset();
   }
 
   return (
-    <main style={{ maxWidth: 560, margin: "0 auto", padding: "var(--sp-4)" }}>
+    <main style={{ maxWidth: 680, margin: "0 auto", padding: "var(--sp-4)" }}>
       <header
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
+          gap: "var(--sp-3)",
           marginBottom: "var(--sp-6)",
         }}
       >
         <h1
           className="interactive"
-          style={{ fontSize: "var(--fs-xl)", cursor: "pointer" }}
+          style={{
+            fontSize: "var(--fs-xl)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            gap: "var(--sp-2)",
+          }}
           onClick={backToSearch}
         >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: "50%",
+              background: "var(--accent-grad)",
+              display: "inline-block",
+            }}
+          />
           Smart Price Advisor
         </h1>
-        <button className="btn interactive" onClick={openPanel}>
-          Watchlist{watchlist.items.length ? ` (${watchlist.items.length})` : ""}
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+          <button
+            className="icon-btn"
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={theme === "dark" ? "Light mode" : "Dark mode"}
+          >
+            {theme === "dark" ? (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="4" />
+                <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" />
+              </svg>
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z" />
+              </svg>
+            )}
+          </button>
+          <button className="btn interactive" onClick={openPanel}>
+            Watchlist{watchlist.items.length ? ` (${watchlist.items.length})` : ""}
+          </button>
+        </div>
       </header>
 
+      {infoPage ? (
+        <InfoPage page={infoPage} onBack={backToSearch} />
+      ) : (
+        <>
       <AlertBanner items={watchlist.items} onOpen={openPanel} />
 
       {screen === "search" && (
@@ -147,6 +223,7 @@ export default function App() {
             <WaitTolerancePicker valueDays={waitDays} onChange={setWaitDays} />
           </div>
           </section>
+          <FeatureGrid />
         </>
       )}
 
@@ -227,6 +304,10 @@ export default function App() {
             </>
           )}
         </section>
+      )}
+
+          <Footer onOpenInfo={openInfo} onOpenWatchlist={openPanel} />
+        </>
       )}
 
       <WatchlistPanel
