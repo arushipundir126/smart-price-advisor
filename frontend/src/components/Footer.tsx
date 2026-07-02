@@ -22,8 +22,6 @@ interface Props {
   onOpenWatchlist: () => void;
 }
 
-const GITHUB_URL = "https://github.com/arushipundir126/smart-price-advisor";
-
 export default function Footer({ onOpenInfo, onOpenWatchlist }: Props) {
   return (
     <footer className="footer">
@@ -53,17 +51,12 @@ export default function Footer({ onOpenInfo, onOpenWatchlist }: Props) {
 
         <div>
           <h4>Company</h4>
+          <button className="link-btn" onClick={() => onOpenInfo("about")}>
+            About
+          </button>
           <button className="link-btn" onClick={() => onOpenInfo("contact")}>
             Contact
           </button>
-          <a
-            className="link-btn"
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Source code
-          </a>
         </div>
 
         <div>

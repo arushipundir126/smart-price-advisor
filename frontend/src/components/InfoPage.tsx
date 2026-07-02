@@ -28,8 +28,6 @@ interface Props {
   onBack: () => void;
 }
 
-const GITHUB_URL = "https://github.com/arushipundir126/smart-price-advisor";
-
 function P({ children }: { children: React.ReactNode }) {
   return <p style={{ color: "var(--text-muted)", marginTop: 0 }}>{children}</p>;
 }
@@ -139,21 +137,9 @@ const CONTENT: Record<InfoKey, { title: string; body: React.ReactNode }> = {
     body: (
       <>
         <P>
-          Questions, feedback, or a store you think we should add? You can raise
-          it on the project's GitHub page. A direct contact option is coming soon.
+          Questions, feedback, or a store you think we should add? A direct
+          contact option is coming soon. Thank you for your patience.
         </P>
-        <p style={{ marginTop: 0 }}>
-          Source code and issues:{" "}
-          <a
-            className="link-btn"
-            style={{ display: "inline", color: "var(--accent)" }}
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            GitHub
-          </a>
-        </p>
       </>
     ),
   },
