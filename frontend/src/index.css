@@ -8,6 +8,9 @@
  *
  * CHANGES THIS SESSION:
  * - Created tokens, base resets, and shared button/card/chip styles.
+ * - Premium AI-SaaS refresh: neutral canvas, indigo accent, layered soft
+ *   shadows, rounded cards, gradient verdict hero, confidence chip variants,
+ *   gradient primary and green buy buttons, collapsible rows, backdrop blur.
  *
  * WHERE IT FITS:
  * Imported once by main.tsx. Every component uses these variables and classes.
@@ -19,23 +22,37 @@
 :root {
   --bg: #f6f7f9;
   --bg-card: #ffffff;
-  --bg-subtle: #eef1f5;
-  --text: #1a1d21;
-  --text-muted: #5b6572;
-  --border: #dfe3e8;
-  --shadow: 0 6px 20px rgba(20, 24, 31, 0.1);
+  --bg-subtle: #eef1f6;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --border: #e6e8ee;
 
-  --primary: #2563eb;
+  /* Layered soft shadows for a premium, lifted feel. */
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+  --shadow-lg: 0 18px 40px rgba(15, 23, 42, 0.14);
+
+  /* One cool accent for chrome, links and focus. */
+  --accent: #6366f1;
+  --accent-strong: #4f46e5;
+  --primary: #6366f1; /* kept as an alias so older styles still resolve */
+
   --buy: #1f9d55;
   --wait: #d4861f;
-
   --buy-bg: #e7f5ee;
   --wait-bg: #fbf0dd;
 
-  --radius-card: 12px;
-  --radius: 8px;
+  /* Verdict hero gradients (soft wash over the card). */
+  --buy-grad: linear-gradient(150deg, #e9f8f0 0%, #ffffff 62%);
+  --wait-grad: linear-gradient(150deg, #fdf1dd 0%, #ffffff 62%);
+  --accent-grad: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
 
-  --fs-2xl: 30px;
+  --radius-card: 16px;
+  --radius: 10px;
+  --radius-pill: 999px;
+
+  --fs-3xl: 34px;
+  --fs-2xl: 28px;
   --fs-xl: 22px;
   --fs-lg: 18px;
   --fs-base: 16px;
@@ -52,16 +69,21 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #14171b;
-    --bg-card: #1c2026;
-    --bg-subtle: #262b32;
-    --text: #eef1f5;
-    --text-muted: #9aa4b1;
-    --border: #313842;
-    --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    --bg: #0b0f19;
+    --bg-card: #131826;
+    --bg-subtle: #1b2233;
+    --text: #e8ebf2;
+    --text-muted: #94a3b8;
+    --border: #232a3b;
 
-    --buy-bg: #143026;
-    --wait-bg: #3a2c14;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 18px 40px rgba(0, 0, 0, 0.55);
+
+    --buy-bg: #123024;
+    --wait-bg: #362811;
+    --buy-grad: linear-gradient(150deg, #12261e 0%, #131826 62%);
+    --wait-grad: linear-gradient(150deg, #2a2011 0%, #131826 62%);
   }
 }
 
@@ -91,7 +113,8 @@ h1,
 h2,
 h3 {
   margin: 0;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: -0.01em;
 }
 
 /* Numbers align nicely (prices, targets). */
@@ -103,9 +126,9 @@ h3 {
 .section-label {
   font-size: var(--fs-xs);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.09em;
   color: var(--text-muted);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /* Card surface. */
@@ -114,12 +137,43 @@ h3 {
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
   padding: var(--sp-6);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Hero verdict card: larger, softly tinted, more presence. */
+.hero {
+  border-radius: var(--radius-card);
+  padding: var(--sp-8) var(--sp-6);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+}
+.hero--buy {
+  background: var(--buy-grad);
+  border-color: color-mix(in srgb, var(--buy) 35%, var(--border));
+}
+.hero--wait {
+  background: var(--wait-grad);
+  border-color: color-mix(in srgb, var(--wait) 35%, var(--border));
+}
+
+/* Big product headline (search screen). */
+.display {
+  font-size: var(--fs-3xl);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.display .accent {
+  background: var(--accent-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 /* Shared interactive lift: rise plus shadow on hover, press down on click. */
 .interactive {
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, background 0.14s ease;
 }
 .interactive:hover {
   transform: translateY(-2px);
@@ -127,7 +181,7 @@ h3 {
 }
 .interactive:active {
   transform: translateY(0);
-  box-shadow: none;
+  box-shadow: var(--shadow-sm);
 }
 .interactive:disabled {
   cursor: not-allowed;
@@ -138,7 +192,7 @@ h3 {
 
 /* Visible focus for keyboard users. */
 :focus-visible {
-  outline: 2px solid var(--primary);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -150,19 +204,41 @@ h3 {
   border: 1px solid var(--border);
   background: var(--bg-card);
   color: var(--text);
-  padding: 12px 16px;
+  padding: 12px 18px;
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, filter 0.14s ease;
+}
+.btn:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.btn:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
 }
 .btn-primary {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--accent-grad);
+  border-color: transparent;
+  color: #ffffff;
+}
+.btn-buy {
+  background: var(--buy);
+  border-color: transparent;
   color: #ffffff;
 }
 .btn-block {
   width: 100%;
 }
 
-/* Inputs. */
-.input {
+/* Inputs and selects. */
+.input,
+.select {
   width: 100%;
   font-size: var(--fs-base);
   color: var(--text);
@@ -170,6 +246,31 @@ h3 {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 12px 14px;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+.input:focus,
+.select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+/* A row that links out (platform prices, offers). */
+.row-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.14s ease, transform 0.14s ease;
+}
+.row-link:hover {
+  background: var(--bg-subtle);
+  transform: translateY(-1px);
 }
 
 /* Loading skeleton: a gentle pulse, no spinner, no blank screen. */
@@ -188,11 +289,12 @@ h3 {
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* Watchlist side panel: slides in from the right with a dim backdrop. */
+/* Watchlist side panel: slides in from the right with a dim, blurred backdrop. */
 .backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(8, 12, 20, 0.45);
+  backdrop-filter: blur(2px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s ease;
@@ -207,11 +309,12 @@ h3 {
   top: 0;
   right: 0;
   height: 100%;
-  width: min(360px, 88vw);
+  width: min(380px, 90vw);
   background: var(--bg-card);
   border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
   transform: translateX(100%);
-  transition: transform 0.22s ease;
+  transition: transform 0.24s ease;
   z-index: 50;
   display: flex;
   flex-direction: column;
@@ -236,11 +339,27 @@ h3 {
 .chip {
   display: inline-block;
   font-size: var(--fs-xs);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  padding: 3px 10px;
-  border-radius: 999px;
+  padding: 4px 12px;
+  border-radius: var(--radius-pill);
   background: var(--bg-subtle);
   color: var(--text-muted);
+  border: 1px solid transparent;
+}
+.chip--high {
+  background: var(--buy-bg);
+  color: var(--buy);
+  border-color: color-mix(in srgb, var(--buy) 30%, transparent);
+}
+.chip--medium {
+  background: var(--wait-bg);
+  color: var(--wait);
+  border-color: color-mix(in srgb, var(--wait) 30%, transparent);
+}
+.chip--low {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border-color: var(--border);
 }

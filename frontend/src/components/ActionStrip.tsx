@@ -8,6 +8,7 @@
  *
  * CHANGES THIS SESSION:
  * - Created the action strip with best price, buy link, and wait estimate.
+ * - Larger price, green buy button (buy affordance), and the new button style.
  *
  * WHERE IT FITS:
  * Directly under the verdict card on the verdict screen.
@@ -43,7 +44,7 @@ export default function ActionStrip({
           marginTop: "var(--sp-1)",
         }}
       >
-        <span className="mono" style={{ fontSize: "var(--fs-xl)", fontWeight: 700 }}>
+        <span className="mono" style={{ fontSize: "var(--fs-2xl)", fontWeight: 800 }}>
           {formatInr(bestPrice)}
         </span>
         {bestPlatform && (
@@ -53,7 +54,7 @@ export default function ActionStrip({
 
       {safeHttpUrl(buyLink) && bestPlatform && (
         <a
-          className="btn btn-primary btn-block interactive"
+          className="btn btn-buy btn-block"
           style={{ marginTop: "var(--sp-4)", display: "block", textAlign: "center" }}
           href={safeHttpUrl(buyLink) as string}
           target="_blank"

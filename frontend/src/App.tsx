@@ -116,10 +116,25 @@ export default function App() {
       <AlertBanner items={watchlist.items} onOpen={openPanel} />
 
       {screen === "search" && (
-        <section className="card">
-          <h2 style={{ fontSize: "var(--fs-lg)", marginBottom: "var(--sp-4)" }}>
-            Buy now or wait?
-          </h2>
+        <>
+          <div style={{ margin: "var(--sp-6) 0 var(--sp-6)" }}>
+            <h2 className="display">
+              Buy smarter. <span className="accent">Save more.</span>
+            </h2>
+            <p
+              style={{
+                marginTop: "var(--sp-3)",
+                marginBottom: 0,
+                fontSize: "var(--fs-lg)",
+                color: "var(--text-muted)",
+              }}
+            >
+              Name a product and how long you can wait. We check the live price,
+              its history, and upcoming sales, then say Buy Now or Wait, backed by
+              evidence, never a guess.
+            </p>
+          </div>
+          <section className="card">
           <SearchBar
             product={product}
             onProductChange={setProduct}
@@ -131,7 +146,8 @@ export default function App() {
           <div style={{ marginTop: "var(--sp-4)" }}>
             <WaitTolerancePicker valueDays={waitDays} onChange={setWaitDays} />
           </div>
-        </section>
+          </section>
+        </>
       )}
 
       {screen === "result" && (
@@ -169,44 +185,33 @@ export default function App() {
               />
               {data.platform_prices && data.platform_prices.length > 1 && (
                 <div className="card">
-                  <p className="section-label">Prices across platforms</p>
+                  <p className="section-label" style={{ marginTop: 0 }}>
+                    Prices across platforms
+                  </p>
                   <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
                     {data.platform_prices.map((p, i) => {
                       const href = safeHttpUrl(p.buy_link);
                       const row = (
                         <>
                           <span>{p.platform}</span>
-                          <span className="mono">{formatInr(p.price)}</span>
+                          <span className="mono" style={{ fontWeight: 600 }}>
+                            {formatInr(p.price)}
+                          </span>
                         </>
                       );
                       return (
                         <li key={`${p.platform}-${i}`}>
                           {href ? (
                             <a
-                              className="interactive"
+                              className="row-link"
                               href={href}
                               target="_blank"
                               rel="noopener noreferrer"
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                padding: "10px 12px",
-                                borderRadius: 8,
-                                textDecoration: "none",
-                                color: "inherit",
-                                cursor: "pointer",
-                              }}
                             >
                               {row}
                             </a>
                           ) : (
-                            <div
-                              style={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                padding: "10px 12px",
-                              }}
-                            >
+                            <div className="row-link" style={{ cursor: "default" }}>
                               {row}
                             </div>
                           )}

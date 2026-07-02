@@ -8,6 +8,8 @@
  *
  * CHANGES THIS SESSION:
  * - Created the verdict card with colour theming and the confidence chip.
+ * - Reworked into a gradient hero with a stronger headline and a confidence
+ *   chip variant (High/Medium/Low), for a premium, high-presence look.
  *
  * WHERE IT FITS:
  * Top of the verdict screen, the single most important element.
@@ -24,35 +26,47 @@ interface Props {
 export default function VerdictCard({ verdict, confidence, summaryReason }: Props) {
   const isBuy = verdict === "Buy Now";
   const accent = isBuy ? "var(--buy)" : "var(--wait)";
-  const tint = isBuy ? "var(--buy-bg)" : "var(--wait-bg)";
+  const chipClass = `chip chip--${confidence.toLowerCase()}`;
 
   return (
-    <div
-      className="card"
-      style={{ background: tint, borderColor: accent, borderWidth: 2 }}
-    >
+    <div className={`hero ${isBuy ? "hero--buy" : "hero--wait"}`}>
       <div
         style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           gap: "var(--sp-3)",
+          marginBottom: "var(--sp-3)",
         }}
       >
-        <span
-          style={{ fontSize: "var(--fs-2xl)", fontWeight: 700, color: accent }}
-        >
-          {verdict}
+        <span className="section-label" style={{ color: accent }}>
+          Our verdict
         </span>
-        <span
-          className="chip"
-          style={{ background: accent, color: "#ffffff" }}
-          title="How strongly the signals agree"
-        >
+        <span className={chipClass} title="How strongly the signals agree">
           {confidence} confidence
         </span>
       </div>
-      <p style={{ marginBottom: 0, marginTop: "var(--sp-3)" }}>{summaryReason}</p>
+      <div
+        style={{
+          fontSize: "var(--fs-3xl)",
+          fontWeight: 800,
+          lineHeight: 1.1,
+          letterSpacing: "-0.02em",
+          color: accent,
+        }}
+      >
+        {verdict}
+      </div>
+      <p
+        style={{
+          marginBottom: 0,
+          marginTop: "var(--sp-3)",
+          fontSize: "var(--fs-lg)",
+          color: "var(--text)",
+        }}
+      >
+        {summaryReason}
+      </p>
     </div>
   );
 }
