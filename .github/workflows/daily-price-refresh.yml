@@ -1,0 +1,50 @@
+# FILE: .github/workflows/daily-price-refresh.yml
+#
+# WHAT THIS DOES:
+# Runs the watchlist price-refresh job once a day on GitHub's free runners, so
+# watched product prices are checked and drop alerts are readied even when nobody
+# opens the app. Replaces the Render cron (which needs a paid card) at no cost.
+#
+# CHANGES THIS SESSION:
+# - Created the daily schedule that runs jobs/refresh_watchlist_prices.py.
+#
+# WHERE IT FITS:
+# The "scheduled checks" piece of the stack, now driven by GitHub Actions instead
+# of a Render cron. Reads keys from GitHub repository Secrets, never from code.
+#
+# CALLED BY / IMPORTS FROM:
+# Runs backend/jobs/refresh_watchlist_prices.py. Secrets set in repo Settings.
+
+name: Daily watchlist price refresh
+
+on:
+  schedule:
+    # 03:30 UTC daily (about 09:00 IST). Adjust the time if you like.
+    - cron: "30 3 * * *"
+  # Lets you run it by hand from the Actions tab to test.
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: pip install -r requirements.txt
+
+      - name: Run the watchlist price refresh
+        working-directory: backend
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          APIFY_API_TOKEN: ${{ secrets.APIFY_API_TOKEN }}
+        run: python -m jobs.refresh_watchlist_prices
