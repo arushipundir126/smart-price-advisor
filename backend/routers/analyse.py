@@ -15,6 +15,9 @@ CHANGES THIS SESSION:
   instead of Gemini's echo, so all six always show and discounts never vanish.
 - Fall back to the last known price from history when the live source returns
   nothing, so a verdict shows a price instead of "price not available".
+- Added a short-lived in-memory price cache so repeat searches of the same
+  product reuse the last live result, saving the live-search quota and loading
+  instantly, without flooding the price history.
 
 WHERE IT FITS:
 The main user-facing endpoint and the join point of the analysis engine.
@@ -25,6 +28,7 @@ the shared limiter. Mounted by main.py.
 """
 import re
 import statistics
+import time
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
@@ -204,6 +208,30 @@ def _rows_from_snapshots(snapshots: list[dict], product: str) -> list[dict]:
     return rows
 
 
+# In-memory price cache. Repeat searches of the same product within the TTL
+# reuse the last live result, so we do not spend a live search (or make the user
+# wait) on every lookup. Kept in memory (per instance), preserves the real buy
+# links, and simply rebuilds after a restart. Small cap to bound memory.
+_PRICE_CACHE: dict[str, tuple[float, list[dict]]] = {}
+_CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours
+_CACHE_MAX = 500
+
+
+def _cache_get(key: str) -> list[dict] | None:
+    """Return cached live rows if present and still fresh, else None."""
+    hit = _PRICE_CACHE.get(key)
+    if hit and time.time() - hit[0] < _CACHE_TTL_SECONDS:
+        return hit[1]
+    return None
+
+
+def _cache_set(key: str, rows: list[dict]) -> None:
+    """Store live rows against a product key, bounding the cache size."""
+    if len(_PRICE_CACHE) >= _CACHE_MAX:
+        _PRICE_CACHE.clear()  # simple bound; cache just warms up again
+    _PRICE_CACHE[key] = (time.time(), rows)
+
+
 @router.post("/analyse")
 @limiter.limit("10/minute")
 def analyse(req: AnalyseRequest, request: Request):
@@ -219,9 +247,17 @@ def analyse(req: AnalyseRequest, request: Request):
 
     category = _guess_category(product)
 
-    # 1. Prices across marketplaces (Apify first, SerpAPI fills gaps).
-    price_rows = fetch_prices(product)
-    price_rows += fetch_shopping_prices(product)
+    # 1. Prices across marketplaces. Serve a recent cached result if we have one,
+    #    otherwise fetch live (Apify first, SerpAPI fills gaps) and cache it.
+    from db.products import normalise_name
+
+    cache_key = normalise_name(product)
+    price_rows = _cache_get(cache_key)
+    from_cache = price_rows is not None
+    if not from_cache:
+        price_rows = fetch_prices(product) + fetch_shopping_prices(product)
+        if price_rows:
+            _cache_set(cache_key, price_rows)
 
     # 2. Database-backed context. Best effort: if the DB is down, these stay
     #    empty and the history signals simply abstain.
@@ -236,11 +272,13 @@ def analyse(req: AnalyseRequest, request: Request):
 
         record = find_or_create_product(product, category=category)
         product_id = record["id"]
-        # Append this lookup's prices so history grows over time.
-        for row in price_rows:
-            add_snapshot(
-                product_id, row["platform"], row["price"], row.get("mrp")
-            )
+        # Only record a snapshot on a fresh live fetch, so the cache does not
+        # flood the history with repeated identical points.
+        if not from_cache:
+            for row in price_rows:
+                add_snapshot(
+                    product_id, row["platform"], row["price"], row.get("mrp")
+                )
         snapshots = _clean_snapshots(get_snapshots(product_id))
         # Median from the cleaned history so junk points do not distort it.
         clean_prices = [float(s["price"]) for s in snapshots]
