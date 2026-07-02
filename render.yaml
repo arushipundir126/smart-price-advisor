@@ -41,19 +41,3 @@ services:
       - key: DATA_GOV_API_KEY
         sync: false
 
-  - type: cron
-    name: watchlist-daily-refresh
-    runtime: python
-    rootDir: backend
-    schedule: "0 3 * * *"  # every day at 03:00 UTC
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m jobs.refresh_watchlist_prices
-    envVars:
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: APIFY_API_TOKEN
-        sync: false
-      - key: SERPAPI_KEY
-        sync: false
