@@ -162,18 +162,27 @@ const CONTENT: Record<InfoKey, { title: string; body: React.ReactNode }> = {
 export default function InfoPage({ page, onBack }: Props) {
   const { title, body } = CONTENT[page];
   return (
-    <section>
+    <section style={{ maxWidth: 640, margin: "0 auto" }}>
       <button
         className="btn interactive"
-        style={{ marginBottom: "var(--sp-4)" }}
+        style={{ marginBottom: "var(--sp-6)" }}
         onClick={onBack}
       >
-        Back
+        ‹ Back to search
       </button>
-      <div className="card">
-        <h2 style={{ fontSize: "var(--fs-xl)", marginBottom: "var(--sp-4)" }}>
-          {title}
-        </h2>
+
+      <p className="section-label">Smart Price Advisor</p>
+      <h2
+        className="display"
+        style={{
+          fontSize: "var(--fs-2xl)",
+          margin: "var(--sp-2) 0 var(--sp-6)",
+        }}
+      >
+        {title}
+      </h2>
+
+      <div className="card" style={{ lineHeight: 1.65 }}>
         {body}
       </div>
     </section>
