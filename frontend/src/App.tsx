@@ -128,7 +128,7 @@ export default function App() {
   }
 
   return (
-    <main style={{ maxWidth: 680, margin: "0 auto", padding: "var(--sp-4)" }}>
+    <main className="page">
       <header
         style={{
           display: "flex",
@@ -193,13 +193,19 @@ export default function App() {
 
       {screen === "search" && (
         <>
-          <div style={{ margin: "var(--sp-6) 0 var(--sp-6)" }}>
+          <div
+            style={{
+              margin: "var(--sp-8) auto var(--sp-6)",
+              maxWidth: 760,
+              textAlign: "center",
+            }}
+          >
             <h2 className="display">
               Buy smarter. <span className="accent">Save more.</span>
             </h2>
             <p
               style={{
-                marginTop: "var(--sp-3)",
+                marginTop: "var(--sp-4)",
                 marginBottom: 0,
                 fontSize: "var(--fs-lg)",
                 color: "var(--text-muted)",
@@ -210,7 +216,7 @@ export default function App() {
               evidence, never a guess.
             </p>
           </div>
-          <section className="card">
+          <section className="card container-narrow">
           <SearchBar
             product={product}
             onProductChange={setProduct}
@@ -228,7 +234,7 @@ export default function App() {
       )}
 
       {screen === "result" && (
-        <section>
+        <section className="container-mid">
           <button
             className="btn interactive"
             style={{ marginBottom: "var(--sp-4)" }}
