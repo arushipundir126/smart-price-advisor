@@ -13,6 +13,8 @@ CHANGES THIS SESSION:
   guess, best-effort DB use, six-signal run, and verdict assembly.
 - Build signal_summaries and stackable_discounts from our own six signal objects
   instead of Gemini's echo, so all six always show and discounts never vanish.
+- Fall back to the last known price from history when the live source returns
+  nothing, so a verdict shows a price instead of "price not available".
 
 WHERE IT FITS:
 The main user-facing endpoint and the join point of the analysis engine.
@@ -166,6 +168,32 @@ def _clean_snapshots(snapshots: list[dict]) -> list[dict]:
     return [s for s in snapshots if lo <= float(s["price"]) <= hi]
 
 
+def _rows_from_snapshots(snapshots: list[dict], product: str) -> list[dict]:
+    """Rebuild price rows from the most recent snapshot per platform.
+
+    Used as a fallback when the live price source returns nothing, so a verdict
+    is still produced from the last known price instead of "price not available".
+    Snapshots arrive newest first, so the first seen per platform is the latest.
+    """
+    from urllib.parse import quote_plus
+
+    search = f"https://www.google.com/search?tbm=shop&q={quote_plus(product)}"
+    seen: dict[str, dict] = {}
+    for s in snapshots:
+        platform = s.get("platform")
+        if platform and platform not in seen:
+            seen[platform] = {
+                "platform": platform,
+                "platform_label": platform.replace("_", " ").title(),
+                "product_name": product,
+                "price": float(s["price"]),
+                "mrp": s.get("mrp"),
+                "url": search,
+                "source": "last_known",
+            }
+    return list(seen.values())
+
+
 @router.post("/analyse")
 @limiter.limit("10/minute")
 def analyse(req: AnalyseRequest, request: Request):
@@ -208,6 +236,10 @@ def analyse(req: AnalyseRequest, request: Request):
         clean_prices = [float(s["price"]) for s in snapshots]
         median = statistics.median(clean_prices) if clean_prices else None
         next_sale = get_next_sale(category)
+        # Fallback: if the live source returned nothing, use the last known price
+        # from history so we still show a price instead of "price not available".
+        if not price_rows and snapshots:
+            price_rows = _rows_from_snapshots(snapshots, product)
     except Exception:
         pass  # degrade gracefully; verdict still produced
 

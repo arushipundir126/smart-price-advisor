@@ -16,6 +16,8 @@ CHANGES THIS SESSION:
 - Restrict to trusted marketplaces (_is_trusted): only Amazon, Flipkart, Croma,
   Reliance, Tata, JioMart, Nykaa, Apple and other trusted sellers can be the
   recommended price, so unknown resellers and refurbished-phone sites are dropped.
+- Longer timeout and one retry, because the free tier sometimes returns an empty
+  result on the first attempt.
 
 WHERE IT FITS:
 Second service client. Fills gaps left by Apify so Signal 2 (cross-platform best
@@ -33,7 +35,10 @@ import statistics
 from db.products import normalise_name
 
 SERPAPI_ENDPOINT = "https://serpapi.com/search.json"
-REQUEST_TIMEOUT_SECONDS = 10
+REQUEST_TIMEOUT_SECONDS = 25
+# The free tier occasionally returns an empty result set on the first try, so we
+# retry once before giving up (the caller then falls back to the last known price).
+MAX_ATTEMPTS = 2
 
 # Words that mean the listing is an ACCESSORY, not the product itself. Google
 # Shopping mixes these in under the same search, and they are far cheaper, so the
@@ -214,14 +219,18 @@ def _fetch_real(product_name: str) -> list[dict]:
         "hl": "en",   # English
         "api_key": os.getenv("SERPAPI_KEY"),
     }
-    try:
-        resp = httpx.get(
-            SERPAPI_ENDPOINT, params=params, timeout=REQUEST_TIMEOUT_SECONDS
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception:
-        return []
+    data = {}
+    for _ in range(MAX_ATTEMPTS):
+        try:
+            resp = httpx.get(
+                SERPAPI_ENDPOINT, params=params, timeout=REQUEST_TIMEOUT_SECONDS
+            )
+            resp.raise_for_status()
+            data = resp.json()
+        except Exception:
+            data = {}
+        if data.get("shopping_results"):
+            break  # got results; stop retrying
 
     results = []
     for item in data.get("shopping_results", []):
