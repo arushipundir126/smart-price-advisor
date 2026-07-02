@@ -28,7 +28,6 @@ interface Props {
   onBack: () => void;
 }
 
-const CONTACT_EMAIL = "arushipundir097@gmail.com";
 const GITHUB_URL = "https://github.com/arushipundir126/smart-price-advisor";
 
 function P({ children }: { children: React.ReactNode }) {
@@ -140,21 +139,11 @@ const CONTENT: Record<InfoKey, { title: string; body: React.ReactNode }> = {
     body: (
       <>
         <P>
-          Questions, feedback, or a store you think we should add? We would love
-          to hear from you.
+          Questions, feedback, or a store you think we should add? You can raise
+          it on the project's GitHub page. A direct contact option is coming soon.
         </P>
         <p style={{ marginTop: 0 }}>
-          Email:{" "}
-          <a
-            className="link-btn"
-            style={{ display: "inline", color: "var(--accent)" }}
-            href={`mailto:${CONTACT_EMAIL}`}
-          >
-            {CONTACT_EMAIL}
-          </a>
-        </p>
-        <p style={{ marginTop: 0 }}>
-          Source code:{" "}
+          Source code and issues:{" "}
           <a
             className="link-btn"
             style={{ display: "inline", color: "var(--accent)" }}
