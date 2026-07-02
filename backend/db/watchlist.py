@@ -12,6 +12,8 @@ CHANGES THIS SESSION:
   mark_purchased(), and mark_notified().
 - Store wait_tolerance_days per item and expose it plus last_checked, and added
   get_active_for_session() so the on-open refresh can pace re-checks per item.
+- Made the wait_tolerance_days column optional: add and list now work even if
+  that column was never added to the database, so the watchlist never fails.
 
 WHERE IT FITS:
 Sits on top of db/supabase_client.py and reuses db/price_snapshots for the
@@ -28,10 +30,11 @@ from db.price_snapshots import get_snapshots
 from db.supabase_client import get_client
 
 # Columns we read back, including the embedded product name/brand/category.
-# Named explicitly, never SELECT * (security rule).
+# Named explicitly, never SELECT * (security rule). wait_tolerance_days is left
+# out here so listing works even if that (optional) column was never added.
 _COLUMNS = (
     "id, session_id, product_id, target_price, notified, purchased, "
-    "purchased_at, wait_tolerance_days, created_at, products(name, brand, category)"
+    "purchased_at, created_at, products(name, brand, category)"
 )
 
 
@@ -43,43 +46,59 @@ def add_or_update_item(
 ) -> dict:
     """Add a product to a session's watchlist, or update its target price.
 
-    Stores the wait window so re-checks can be paced to it. Uses the unique
-    (session_id, product_id) constraint so re-adding the same product updates the
-    existing row instead of creating a duplicate.
+    Stores the wait window when the column exists so re-checks can be paced to it.
+    If that optional column was never added, we still add the item (without the
+    window) rather than fail. Uses the unique (session_id, product_id) constraint
+    so re-adding the same product updates the existing row.
     """
     client = get_client()
-    result = (
-        client.table("watchlist_items")
-        .upsert(
-            {
-                "session_id": session_id,
-                "product_id": product_id,
-                "target_price": target_price,
-                "wait_tolerance_days": wait_tolerance_days,
-            },
-            on_conflict="session_id,product_id",
+    base = {
+        "session_id": session_id,
+        "product_id": product_id,
+        "target_price": target_price,
+    }
+    try:
+        result = (
+            client.table("watchlist_items")
+            .upsert({**base, "wait_tolerance_days": wait_tolerance_days},
+                    on_conflict="session_id,product_id")
+            .execute()
         )
-        .execute()
-    )
+    except Exception:
+        # Column not present: add without the wait window so the watchlist works.
+        result = (
+            client.table("watchlist_items")
+            .upsert(base, on_conflict="session_id,product_id")
+            .execute()
+        )
     return result.data[0]
 
 
 def get_active_for_session(session_id: str) -> list[dict]:
     """Not-yet-bought items for one session, with product name and wait window.
 
-    Used by the on-open refresh to decide which items are due for a re-check.
+    Used by the on-open refresh to decide which items are due for a re-check. The
+    wait window is read only if that optional column exists; otherwise it is None
+    and the refresh falls back to a default cadence.
     """
     client = get_client()
-    result = (
-        client.table("watchlist_items")
-        .select(
-            "id, product_id, target_price, notified, wait_tolerance_days, "
-            "products(name)"
+
+    def _query(columns: str):
+        return (
+            client.table("watchlist_items")
+            .select(columns)
+            .eq("session_id", session_id)
+            .eq("purchased", False)
+            .execute()
         )
-        .eq("session_id", session_id)
-        .eq("purchased", False)
-        .execute()
-    )
+
+    try:
+        result = _query(
+            "id, product_id, target_price, notified, wait_tolerance_days, products(name)"
+        )
+    except Exception:
+        result = _query("id, product_id, target_price, notified, products(name)")
+
     return [
         {
             "id": r["id"],
