@@ -151,7 +151,7 @@ def _fetch_real(
 
         genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
         model = genai.GenerativeModel(
-            "gemini-1.5-flash", system_instruction=SYSTEM_PROMPT
+            "gemini-2.5-flash", system_instruction=SYSTEM_PROMPT
         )
         user_message = json.dumps(
             {
