@@ -272,6 +272,18 @@ def analyse(req: AnalyseRequest, request: Request):
 
         record = find_or_create_product(product, category=category)
         product_id = record["id"]
+        # Category: prefer what is stored on the product. If neither the store
+        # nor the keyword guesser knows it, ask Gemini once and cache the answer
+        # on the row, so the elasticity signal can vote for every product.
+        if record.get("category"):
+            category = record["category"]
+        elif category is None:
+            from db.products import update_category
+            from services.gemini_client import classify_category
+
+            category = classify_category(product)
+            if category:
+                update_category(product_id, category)
         # Only record a snapshot on a fresh live fetch, so the cache does not
         # flood the history with repeated identical points.
         if not from_cache:

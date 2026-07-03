@@ -13,6 +13,8 @@ CHANGES THIS SESSION:
 - Store wait_tolerance_days on add and added POST /{session_id}/refresh, which
   re-checks prices on app open at an adaptive per-item interval (replaces the
   daily cron for the free, no-card deployment).
+- All endpoints now require a signed-in user: identity comes only from the
+  verified Supabase token (require_user_id); client-sent ids are ignored.
 
 WHERE IT FITS:
 Sits on top of db/watchlist.py. Mounted by main.py. Backs the watchlist panel in
@@ -24,9 +26,10 @@ Imports the watchlist db helpers. Mounted by main.py.
 import math
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
+from auth_helper import require_user_id
 from db import watchlist as wl
 from db.price_snapshots import add_snapshot, get_snapshots
 from limiter import limiter
@@ -41,14 +44,9 @@ _FRIENDLY_ERROR = {
     "a moment.",
 }
 
-# Cap external price fetches per refresh call, so a session with very many items
+# Cap external price fetches per refresh call, so a user with very many items
 # cannot drain the SerpAPI quota or make one request run for a long time.
 _MAX_REFETCH_PER_CALL = 25
-
-
-def _valid_session(session_id: str) -> bool:
-    """Cheap format guard for the session id path param (defense in depth)."""
-    return 8 <= len(session_id) <= 100
 
 
 def _interval_days(wait_days: int) -> float:
@@ -77,7 +75,9 @@ def _last_checked(product_id: str) -> datetime | None:
 
 
 class WatchlistAddRequest(BaseModel):
-    session_id: str = Field(min_length=8, max_length=100)
+    # session_id is accepted for backward compatibility but IGNORED: identity
+    # comes only from the verified sign-in token (security contract).
+    session_id: str | None = Field(default=None, max_length=100)
     product_id: str = Field(min_length=8, max_length=100)
     target_price: float | None = Field(default=None, gt=0)
     wait_tolerance_days: int | None = Field(default=None, ge=1, le=365)
@@ -85,11 +85,15 @@ class WatchlistAddRequest(BaseModel):
 
 @router.post("")
 @limiter.limit("30/minute")
-def add_item(req: WatchlistAddRequest, request: Request):
-    """Add a product to the watchlist, or update its target price."""
+def add_item(
+    req: WatchlistAddRequest,
+    request: Request,
+    user_id: str = Depends(require_user_id),
+):
+    """Add a product to the signed-in user's watchlist, or update its target."""
     try:
         item = wl.add_or_update_item(
-            req.session_id,
+            user_id,
             req.product_id,
             req.target_price,
             req.wait_tolerance_days,
@@ -101,19 +105,21 @@ def add_item(req: WatchlistAddRequest, request: Request):
 
 @router.post("/{session_id}/refresh")
 @limiter.limit("30/minute")
-def refresh(session_id: str, request: Request):
+def refresh(
+    session_id: str,
+    request: Request,
+    user_id: str = Depends(require_user_id),
+):
     """Re-check prices for items whose adaptive interval has elapsed.
 
     Called when the user opens the app. Each item is re-checked at most once per
     its interval, so opening the app many times a day triggers at most one check
     per due item. Replaces the old daily cron for the no-card deployment.
     """
-    if not _valid_session(session_id):
-        return {"ok": True, "items": []}
     try:
         now = datetime.now(timezone.utc)
         refetched = 0
-        for item in wl.get_active_for_session(session_id):
+        for item in wl.get_active_for_session(user_id):
             name = item.get("name")
             if not name:
                 continue
@@ -139,30 +145,35 @@ def refresh(session_id: str, request: Request):
             if target is not None and best <= float(target) and not item["notified"]:
                 wl.mark_notified(item["id"])
 
-        return {"ok": True, "items": wl.list_for_session(session_id)}
+        return {"ok": True, "items": wl.list_for_session(user_id)}
     except Exception:
         return _FRIENDLY_ERROR
 
 
 @router.get("/{session_id}")
-def list_items(session_id: str):
-    """List everything a session is watching, with each item's latest price."""
-    if not _valid_session(session_id):
-        return {"ok": True, "items": []}
+def list_items(session_id: str, user_id: str = Depends(require_user_id)):
+    """List the signed-in user's watchlist with each item's latest price.
+
+    The path segment is kept for API-shape compatibility but ignored; identity
+    comes only from the verified token.
+    """
     try:
-        return {"ok": True, "items": wl.list_for_session(session_id)}
+        return {"ok": True, "items": wl.list_for_session(user_id)}
     except Exception:
         return _FRIENDLY_ERROR
 
 
 @router.delete("/{session_id}/{product_id}")
 @limiter.limit("30/minute")
-def remove_item(session_id: str, product_id: str, request: Request):
-    """Remove one product from a session's watchlist."""
-    if not _valid_session(session_id):
-        return _FRIENDLY_ERROR
+def remove_item(
+    session_id: str,
+    product_id: str,
+    request: Request,
+    user_id: str = Depends(require_user_id),
+):
+    """Remove one product from the signed-in user's watchlist."""
     try:
-        wl.remove_item(session_id, product_id)
+        wl.remove_item(user_id, product_id)
         return {"ok": True}
     except Exception:
         return _FRIENDLY_ERROR
@@ -170,12 +181,15 @@ def remove_item(session_id: str, product_id: str, request: Request):
 
 @router.post("/{session_id}/{product_id}/purchased")
 @limiter.limit("30/minute")
-def mark_purchased(session_id: str, product_id: str, request: Request):
+def mark_purchased(
+    session_id: str,
+    product_id: str,
+    request: Request,
+    user_id: str = Depends(require_user_id),
+):
     """Mark a watched product as bought."""
-    if not _valid_session(session_id):
-        return _FRIENDLY_ERROR
     try:
-        item = wl.mark_purchased(session_id, product_id)
+        item = wl.mark_purchased(user_id, product_id)
         if item is None:
             return {
                 "error": "not_found",

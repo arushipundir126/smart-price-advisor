@@ -17,6 +17,9 @@
  * - Landing structure: bold hero, features grid, footer with Product/Company/
  *   Legal links, in-app info pages (About, Disclaimer, Privacy, Terms, Contact),
  *   and a light/dark theme toggle that overrides the system setting.
+ * - Sign-in: watchlist now needs an account (AuthPage), searched products are
+ *   auto-added to the signed-in user's watchlist, sign-out in the header, and
+ *   entrance/stagger animations on the main screens.
  *
  * WHERE IT FITS:
  * The root component. Wires the hooks to the components.
@@ -28,6 +31,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import ActionStrip from "./components/ActionStrip";
 import AlertBanner from "./components/AlertBanner";
+import AuthPage from "./components/AuthPage";
 import ErrorState from "./components/ErrorState";
 import FeatureGrid from "./components/FeatureGrid";
 import Footer from "./components/Footer";
@@ -43,6 +47,7 @@ import WaitTolerancePicker from "./components/WaitTolerancePicker";
 import WatchlistButton from "./components/WatchlistButton";
 import WatchlistPanel from "./components/WatchlistPanel";
 import { useAnalyse } from "./hooks/useAnalyse";
+import { useAuth } from "./hooks/useAuth";
 import { useWatchlist } from "./hooks/useWatchlist";
 import { formatInr, safeHttpUrl } from "./utils/formatting";
 
@@ -75,9 +80,11 @@ export default function App() {
   const [recent, setRecent] = useState<string[]>(loadRecent);
   const [panelOpen, setPanelOpen] = useState(false);
   const [infoPage, setInfoPage] = useState<InfoKey | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
   const [theme, setTheme] = useState<Theme>(initialTheme);
 
   const { loading, data, error, analyse, reset } = useAnalyse();
+  const auth = useAuth();
   const watchlist = useWatchlist();
 
   // Apply the theme to the document root; the CSS reads [data-theme].
@@ -94,17 +101,33 @@ export default function App() {
     window.scrollTo({ top: 0 });
   }, []);
 
-  // On app open, re-check watched prices. The server only re-checks items whose
-  // adaptive interval has elapsed, so opening many times a day does not overcheck.
+  // On app open (and whenever sign-in state settles), re-check watched prices.
+  // Signed out this is a silent no-op; signed in, the server only re-checks
+  // items whose adaptive interval has elapsed, so it never over-checks.
   const { checkPrices } = watchlist;
+  const { signedIn } = auth;
   useEffect(() => {
-    checkPrices();
-  }, [checkPrices]);
+    if (signedIn) checkPrices();
+  }, [checkPrices, signedIn]);
 
   const openPanel = useCallback(() => {
+    if (!signedIn) {
+      setAuthOpen(true); // the watchlist needs an account
+      return;
+    }
     setPanelOpen(true);
     checkPrices(); // opening is an explicit intent, so read the latest
-  }, [checkPrices]);
+  }, [checkPrices, signedIn]);
+
+  // Every product a signed-in user analyses lands on their watchlist
+  // automatically (without touching any target price they may have set).
+  const productId = data?.product_id ?? null;
+  useEffect(() => {
+    if (signedIn && productId) {
+      watchlist.add(productId, null, waitDays);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, signedIn]);
 
   function rememberRecent(term: string) {
     const next = [term, ...recent.filter((r) => r !== term)].slice(0, 5);
@@ -182,10 +205,29 @@ export default function App() {
           <button className="btn interactive" onClick={openPanel}>
             Watchlist{watchlist.items.length ? ` (${watchlist.items.length})` : ""}
           </button>
+          {auth.signedIn && (
+            <button
+              className="btn interactive"
+              onClick={() => auth.signOut()}
+              title={auth.email ?? undefined}
+            >
+              Sign out
+            </button>
+          )}
         </div>
       </header>
 
-      {infoPage ? (
+      {authOpen && !auth.signedIn ? (
+        <AuthPage
+          onSignIn={auth.signIn}
+          onSignUp={auth.signUp}
+          onDone={() => {
+            setAuthOpen(false);
+            setPanelOpen(true);
+          }}
+          onBack={() => setAuthOpen(false)}
+        />
+      ) : infoPage ? (
         <InfoPage page={infoPage} onBack={backToSearch} />
       ) : (
         <>
@@ -194,6 +236,7 @@ export default function App() {
       {screen === "search" && (
         <>
           <div
+            className="rise-in"
             style={{
               margin: "var(--sp-8) auto var(--sp-6)",
               maxWidth: 760,
@@ -246,7 +289,7 @@ export default function App() {
           {loading && <LoadingState />}
           {!loading && error && <ErrorState message={error} product={product} />}
           {!loading && data && (
-            <>
+            <div className="stagger">
               <VerdictCard
                 verdict={data.verdict}
                 confidence={data.confidence}
@@ -262,9 +305,16 @@ export default function App() {
               <WatchlistButton
                 productId={data.product_id}
                 defaultTarget={data.best_price}
-                onAdd={(productId, target) =>
-                  watchlist.add(productId, target, waitDays)
-                }
+                onAdd={async (productIdIn, target) => {
+                  if (!auth.signedIn) {
+                    setAuthOpen(true);
+                    return {
+                      ok: false,
+                      message: "Please sign in to set a price alert.",
+                    };
+                  }
+                  return watchlist.add(productIdIn, target, waitDays);
+                }}
               />
               {data.platform_prices && data.platform_prices.length > 1 && (
                 <div className="card">
@@ -307,7 +357,7 @@ export default function App() {
               <StackableDiscounts discounts={data.stackable_discounts} />
               <SignalBreakdown signals={data.signal_summaries} />
               <PriceSparkline prices={data.price_history} median={data.price_median} />
-            </>
+            </div>
           )}
         </section>
       )}

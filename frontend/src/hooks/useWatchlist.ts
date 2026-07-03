@@ -2,24 +2,27 @@
  * FILE: frontend/src/hooks/useWatchlist.ts
  *
  * WHAT THIS DOES:
- * Talks to the four watchlist endpoints using this browser's session id: list,
- * add or update, remove, and mark bought. Exposes items, loading, error, and the
- * actions. All failures become plain-language messages.
+ * Talks to the watchlist endpoints for the signed-in user: list, price
+ * re-check on open, add or update, remove, and mark bought. Every call carries
+ * the sign-in token; identity is decided server-side from that token. When the
+ * user is signed out, calls are skipped and needsAuth is flagged so the app can
+ * show the sign-in screen. All failures become plain-language messages.
  *
  * CHANGES THIS SESSION:
  * - Created the hook, the WatchlistItem type, and the four actions.
  * - add() now sends the wait window, and checkPrices() calls the on-open refresh
  *   endpoint that re-checks due items at an adaptive, per-item interval.
+ * - Auth-aware: Bearer token on every call, needsAuth flag when signed out.
  *
  * WHERE IT FITS:
  * Backs the watchlist side panel and the "alert me" button.
  *
  * CALLED BY / IMPORTS FROM:
- * Reads VITE_API_BASE_URL and getSessionId. Called by the watchlist components.
+ * Reads VITE_API_BASE_URL and lib/supabase getAccessToken. Called by App.
  */
 import { useCallback, useState } from "react";
 
-import { getSessionId } from "../utils/session";
+import { getAccessToken } from "../lib/supabase";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? "";
 
@@ -40,20 +43,49 @@ export interface WatchlistItem {
 
 const FRIENDLY_ERROR =
   "We could not reach your watchlist just now. Please try again in a moment.";
+const SIGN_IN_MESSAGE = "Please sign in to use your watchlist.";
 
 export function useWatchlist() {
   const [items, setItems] = useState<WatchlistItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const sessionId = getSessionId();
+  const [needsAuth, setNeedsAuth] = useState(false);
+
+  const call = useCallback(
+    async (path: string, init?: RequestInit): Promise<Response | null> => {
+      const token = await getAccessToken();
+      if (!token) {
+        setNeedsAuth(true);
+        return null;
+      }
+      setNeedsAuth(false);
+      return fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: {
+          ...(init?.headers ?? {}),
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    },
+    []
+  );
 
   // Quick list, no price re-fetch. Used after add/remove/mark to update the UI.
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(`${API_BASE}/api/watchlist/${sessionId}`);
+      const resp = await call("/api/watchlist/me");
+      if (!resp) {
+        setItems([]);
+        return;
+      }
       const json = await resp.json();
+      if (resp.status === 401) {
+        setNeedsAuth(true);
+        setItems([]);
+        return;
+      }
       if (!resp.ok || json.error) {
         setError(json.message ?? FRIENDLY_ERROR);
         return;
@@ -64,20 +96,26 @@ export function useWatchlist() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [call]);
 
   // On app open: re-check prices for items whose adaptive interval has elapsed.
   // The server decides which items are due, so calling this on every open is
-  // safe and never over-checks.
+  // safe and never over-checks. Silently does nothing when signed out.
   const checkPrices = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(
-        `${API_BASE}/api/watchlist/${sessionId}/refresh`,
-        { method: "POST" }
-      );
+      const resp = await call("/api/watchlist/me/refresh", { method: "POST" });
+      if (!resp) {
+        setItems([]);
+        return;
+      }
       const json = await resp.json();
+      if (resp.status === 401) {
+        setNeedsAuth(true);
+        setItems([]);
+        return;
+      }
       if (!resp.ok || json.error) {
         setError(json.message ?? FRIENDLY_ERROR);
         return;
@@ -88,7 +126,7 @@ export function useWatchlist() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [call]);
 
   async function add(
     productId: string,
@@ -96,18 +134,20 @@ export function useWatchlist() {
     waitToleranceDays: number | null = null
   ) {
     try {
-      const resp = await fetch(`${API_BASE}/api/watchlist`, {
+      const resp = await call("/api/watchlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId,
           product_id: productId,
           target_price: targetPrice,
           wait_tolerance_days: waitToleranceDays,
         }),
       });
+      if (!resp) return { ok: false, message: SIGN_IN_MESSAGE };
       const json = await resp.json();
-      if (!resp.ok || json.error) return { ok: false, message: json.message ?? FRIENDLY_ERROR };
+      if (!resp.ok || json.error) {
+        return { ok: false, message: json.message ?? FRIENDLY_ERROR };
+      }
       await refresh();
       return { ok: true };
     } catch {
@@ -117,9 +157,7 @@ export function useWatchlist() {
 
   async function remove(productId: string) {
     try {
-      await fetch(`${API_BASE}/api/watchlist/${sessionId}/${productId}`, {
-        method: "DELETE",
-      });
+      await call(`/api/watchlist/me/${productId}`, { method: "DELETE" });
       await refresh();
     } catch {
       setError(FRIENDLY_ERROR);
@@ -128,15 +166,22 @@ export function useWatchlist() {
 
   async function markBought(productId: string) {
     try {
-      await fetch(
-        `${API_BASE}/api/watchlist/${sessionId}/${productId}/purchased`,
-        { method: "POST" }
-      );
+      await call(`/api/watchlist/me/${productId}/purchased`, { method: "POST" });
       await refresh();
     } catch {
       setError(FRIENDLY_ERROR);
     }
   }
 
-  return { items, loading, error, refresh, checkPrices, add, remove, markBought };
+  return {
+    items,
+    loading,
+    error,
+    needsAuth,
+    refresh,
+    checkPrices,
+    add,
+    remove,
+    markBought,
+  };
 }

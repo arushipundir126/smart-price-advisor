@@ -8,6 +8,7 @@ fetch one product by id.
 
 CHANGES THIS SESSION:
 - Added normalise_name(), find_or_create_product(), and get_product().
+- Added update_category() so a Gemini-classified category is cached on the row.
 
 WHERE IT FITS:
 Sits on top of db/supabase_client.py. Used by the analyse flow to resolve a
@@ -70,6 +71,31 @@ def find_or_create_product(
         .execute()
     )
     return inserted.data[0]
+
+
+def update_category(product_id: str, category: str) -> None:
+    """Save a classified category on the product so we never classify it again."""
+    client = get_client()
+    (
+        client.table("products")
+        .update({"category": category})
+        .eq("id", product_id)
+        .execute()
+    )
+
+
+def get_recent_products(limit: int = 10) -> list[dict]:
+    """Most recently added products, newest first. Used by the daily refresh to
+    keep building price history for what people actually search."""
+    client = get_client()
+    result = (
+        client.table("products")
+        .select("id, name")
+        .order("created_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return result.data
 
 
 def get_product(product_id: str) -> Optional[dict]:

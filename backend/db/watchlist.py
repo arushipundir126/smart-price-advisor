@@ -52,16 +52,19 @@ def add_or_update_item(
     so re-adding the same product updates the existing row.
     """
     client = get_client()
-    base = {
-        "session_id": session_id,
-        "product_id": product_id,
-        "target_price": target_price,
-    }
+    # Only include optional columns when a value was given, so an automatic
+    # re-add (for example on a repeat search) never wipes an existing target
+    # price or wait window on the row.
+    base = {"session_id": session_id, "product_id": product_id}
+    if target_price is not None:
+        base["target_price"] = target_price
+    with_window = dict(base)
+    if wait_tolerance_days is not None:
+        with_window["wait_tolerance_days"] = wait_tolerance_days
     try:
         result = (
             client.table("watchlist_items")
-            .upsert({**base, "wait_tolerance_days": wait_tolerance_days},
-                    on_conflict="session_id,product_id")
+            .upsert(with_window, on_conflict="session_id,product_id")
             .execute()
         )
     except Exception:

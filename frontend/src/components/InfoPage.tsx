@@ -96,21 +96,24 @@ const CONTENT: Record<InfoKey, { title: string; body: React.ReactNode }> = {
     body: (
       <>
         <P>
-          We keep this simple. There are no accounts and we do not collect
-          personal data such as your name, email, or address.
+          We keep this simple. To use the watchlist you create an account with
+          an email address and a password. That email is the only personal
+          detail we store. Your password is handled by Supabase, our sign-in
+          provider, and we never see it.
         </P>
         <P>
-          Your watchlist is tied to a random ID stored only in your browser. If
-          you clear your browser data, your watchlist is gone. We do not link it
-          to you.
+          Your watchlist is tied to your account, so it follows you across
+          devices. You can remove items at any time.
         </P>
         <P>
           To produce a verdict we send the product you type to third-party
           services (price and shopping data, news, and an AI model) so they can
-          return live results. We do not send them any personal information.
+          return live results. Your email and account details are never sent to
+          them.
         </P>
         <P>
-          We do not sell data and we do not run advertising trackers.
+          We do not sell data and we do not run advertising trackers. Searching
+          for products works without an account; only the watchlist needs one.
         </P>
       </>
     ),

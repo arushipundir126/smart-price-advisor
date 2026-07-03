@@ -19,6 +19,9 @@ CHANGES THIS SESSION:
   home, brand stores) and switched to safe whole-word matching.
 - Longer timeout and one retry, because the free tier sometimes returns an empty
   result on the first attempt.
+- Parse the strikethrough "was" price into mrp (only when above the selling
+  price) and pass Google's deal badge through as deal_tag, so the fake-discount
+  signal can use real MRP and Google's own low-price call.
 
 WHERE IT FITS:
 Second service client. Fills gaps left by Apify so Signal 2 (cross-platform best
@@ -263,13 +266,22 @@ def _fetch_real(product_name: str) -> list[dict]:
         if price is None:
             continue
         seller = item.get("source") or "Google Shopping"
+
+        # Strikethrough "was" price doubles as the MRP. Google sometimes
+        # mis-parses it (a Rs 30 "was" on a Rs 24,000 item), so only keep it
+        # when it is actually above the selling price.
+        old_price = item.get("extracted_old_price")
+        mrp = float(old_price) if old_price and float(old_price) > float(price) else None
+
         results.append(
             {
                 "platform": normalise_name(seller).replace(" ", "_"),
                 "platform_label": seller,
                 "product_name": item.get("title") or product_name,
                 "price": float(price),
-                "mrp": None,
+                "mrp": mrp,
+                # Google's own price assessment, e.g. "LOW PRICE" / "PRICE DROP".
+                "deal_tag": item.get("tag"),
                 # Prefer a direct merchant link; fall back to the Google page.
                 "url": item.get("link") or item.get("product_link"),
                 "source": "serpapi",

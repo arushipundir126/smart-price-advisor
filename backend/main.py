@@ -25,6 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+import auth_helper
 from limiter import limiter
 from routers import analyse, watchlist
 
@@ -50,6 +51,7 @@ app.add_middleware(
 
 app.include_router(analyse.router)
 app.include_router(watchlist.router)
+app.include_router(auth_helper.router)
 
 
 @app.get("/api/health")

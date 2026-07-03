@@ -11,6 +11,8 @@ directly from the signal votes, so the app always produces an answer.
 CHANGES THIS SESSION:
 - Added SYSTEM_PROMPT, synthesise_verdict(), a real Gemini path, and a
   deterministic fallback that defers to signals/aggregator when available.
+- Added classify_category(): one cached Gemini call that maps an unknown
+  product to an elasticity category, validated against the real table.
 
 WHERE IT FITS:
 Fifth service client and the last step of the analysis engine. Called by the
@@ -164,6 +166,49 @@ def _fetch_real(
         )
         resp = model.generate_content(user_message)
         return _parse_json(resp.text)
+    except Exception:
+        return None
+
+
+def classify_category(product_name: str) -> Optional[str]:
+    """Ask Gemini which elasticity category a product belongs to.
+
+    Used only when the keyword guesser fails, and the answer is cached on the
+    product row by the caller, so this costs one call per new product ever.
+    The reply is validated against the real category list; None on any failure
+    or when no key is set, so the caller simply proceeds without a category.
+    """
+    if not _real_enabled():
+        return None
+    try:
+        import json as _json
+        import os as _os
+
+        table_path = _os.path.join(
+            _os.path.dirname(_os.path.dirname(__file__)),
+            "data",
+            "category_elasticity.json",
+        )
+        with open(table_path) as f:
+            table = _json.load(f)
+        # The table is {"_comment": ..., "categories": [{"category": name, ...}]}
+        # so collect the names from the entry list.
+        valid = {e["category"] for e in table.get("categories", [])}
+        if not valid:
+            return None
+
+        import google.generativeai as genai
+
+        genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+        model = genai.GenerativeModel("gemini-2.5-flash")
+        prompt = (
+            "Classify this Indian shopping product into exactly one category "
+            f"from this list: {', '.join(sorted(valid))}. "
+            f"Product: {product_name}. Reply with only the category name."
+        )
+        resp = model.generate_content(prompt)
+        answer = resp.text.strip().lower().replace(" ", "_")
+        return answer if answer in valid else None
     except Exception:
         return None
 
