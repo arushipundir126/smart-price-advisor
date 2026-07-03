@@ -18,8 +18,8 @@ Uses db/supabase_client.get_client (service role key required).
 """
 from db.supabase_client import get_client
 
-DEMO_EMAIL = "mentor.demo@smartpriceadvisor.app"
-DEMO_PASSWORD = "Mentor2026Demo"
+DEMO_EMAIL = "demo@smartpriceadvisor.app"
+DEMO_PASSWORD = "Demo2026Pass"
 
 
 def run() -> None:
