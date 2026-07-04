@@ -301,7 +301,7 @@ cp .env.example .env             # fill in values, see table below
 uvicorn main:app --reload --port 8000
 ```
 
-Swagger UI: http://localhost:8000/docs
+Swagger UI: available at the `/docs` path of whatever address `uvicorn` prints in your terminal (default port 8000).
 
 ### 2. Database (one time)
 
@@ -315,7 +315,7 @@ Swagger UI: http://localhost:8000/docs
 cd frontend
 npm install
 cp .env.example .env             # set the three values below
-npm run dev                      # http://localhost:5173
+npm run dev                      # open the address Vite prints in your terminal
 ```
 
 ### Environment Variables
@@ -347,7 +347,7 @@ Without any optional keys, the app runs end to end on built-in mock data.
 ## Running the Project
 
 - **Live production app:** https://smart-price-advisor.vercel.app (backed by `https://smart-price-advisor.onrender.com`)
-- **Locally:** follow [Installation Guide](#installation-guide) above; the frontend runs at `http://localhost:5173` against a local backend at `http://localhost:8000`
+- **Locally:** follow [Installation Guide](#installation-guide) above; run the backend (`uvicorn`) and the frontend (`npm run dev`) in separate terminals, each printing the address to open
 
 ## API Documentation
 
@@ -445,7 +445,7 @@ POST /api/analyse
 
 ## License
 
-No license file is currently included; all rights reserved by the project owner. Add a `LICENSE` file (MIT, Apache-2.0, etc.) if you intend to open source this project.
+Released under the [MIT License](LICENSE).
 
 ---
 
