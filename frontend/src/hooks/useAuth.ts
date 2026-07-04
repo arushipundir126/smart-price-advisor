@@ -53,7 +53,16 @@ export function useAuth() {
         email: emailIn.trim(),
         password,
       });
-      if (error) return { ok: false, message: WRONG_CREDENTIALS };
+      if (error) {
+        // Only blame the password when Supabase actually rejected the
+        // credentials; anything else (bad API key, network) is a setup issue
+        // and saying "wrong password" would send people in circles.
+        const wrongCreds = /invalid login credentials/i.test(error.message);
+        return {
+          ok: false,
+          message: wrongCreds ? WRONG_CREDENTIALS : GENERIC_AUTH_ERROR,
+        };
+      }
       return { ok: true };
     } catch {
       return { ok: false, message: GENERIC_AUTH_ERROR };

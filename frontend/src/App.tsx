@@ -205,13 +205,20 @@ export default function App() {
           <button className="btn interactive" onClick={openPanel}>
             Watchlist{watchlist.items.length ? ` (${watchlist.items.length})` : ""}
           </button>
-          {auth.signedIn && (
+          {auth.signedIn ? (
             <button
               className="btn interactive"
               onClick={() => auth.signOut()}
               title={auth.email ?? undefined}
             >
               Sign out
+            </button>
+          ) : (
+            <button
+              className="btn btn-primary"
+              onClick={() => setAuthOpen(true)}
+            >
+              Sign in
             </button>
           )}
         </div>
